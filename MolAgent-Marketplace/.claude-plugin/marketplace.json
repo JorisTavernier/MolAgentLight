@@ -1,0 +1,24 @@
+{
+  "name": "molagent-marketplace",
+  "owner": {
+    "name": "MolAgent Team"
+  },
+  "metadata": {
+    "description": "Claude Code plugin marketplace for MolAgent - automated molecular property prediction with ensemble stacking models",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "molagent-taskmanager",
+      "source": "./plugins/molagent-taskmanager",
+      "description": "Train and deploy molecular property prediction models from SMILES data using ensemble stacking methods",
+      "version": "1.0.0",
+      "author": { "name": "MolAgent Team" },
+      "category": "scientific-computing",
+      "tags": ["drug-discovery", "qsar", "machine-learning", "cheminformatics"],
+      "keywords": ["smiles", "ensemble", "stacking", "molecular-features"],
+      "repository": "https://github.com/JorisTavernier/MolAgentLight",
+      "strict": true
+    }
+  ]
+}
