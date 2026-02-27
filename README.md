@@ -41,15 +41,43 @@ cd MolAgentLight
 - Python 3.10+
 - [uv](https://docs.astral.sh/uv/) package manager
 
-## Quick Start
+Note that earlier version of python on your system is fine, the virtual uv  environment will use newer version.  
+### Windows Troubleshooting
 
-### Running with Claude Code
-
-Start Claude Code with the MolAgent plugin:
+If `uv` is not found after installing it with `pip` or pip is not found after installing python, add the Python Scripts directory to your PATH:
 
 ```bash
-claude --plugin-dir ./MolAgent-TaskManager/
+export PATH="$HOME/AppData/Roaming/Python/PythonXX/Scripts:$PATH"
 ```
+
+Replace `PythonXX` with your Python version, e.g. `Python312`.
+
+If you are behind a corporate firewall or proxy, set native TLS so `uv` uses the system certificate store:
+
+```bash
+export UV_NATIVE_TLS=true
+```
+
+### Custom Virtual Environment
+
+By default the plugin creates and uses a `.venv` directory in the project root. To use a different virtual environment, set the `AUTOMOL_VENV` environment variable before starting Claude Code:
+
+```bash
+export AUTOMOL_VENV=/path/to/your/venv
+```
+
+## Quick Start
+
+### Install the Plugin
+
+In Claude Code:
+
+```
+/plugin marketplace add ./MolAgent-Marketplace
+/plugin install molagent-taskmanager@molagent-marketplace
+```
+
+> **Note:** After installing the plugin, restart Claude Code so the SessionStart hook runs and sets up the virtual environment with AutoMol and the environment variables (only the first time). Now restart Claude code a **second** time and you are good to go.   
 
 ### Train a Model
 
@@ -83,6 +111,7 @@ Or:
 > /predict
 ```
 
+The predict skill will list the trained models from the registry. 
 ---
 
 ## Skills
@@ -129,17 +158,21 @@ Single-phase inference skill.
 ## Architecture
 
 ```
-MolAgent/
-├── AutoMol/                    # Core ML library (submodule)
-│   └── automol/automol/
-│       ├── stacking.py         # Ensemble model classes
-│       ├── feature_generators.py
-│       └── model_search.py
-└── MolAgent-TaskManager/      # Claude Code plugin
-    ├── skills/
-    │   ├── train-pipeline/     # Training skill
-    │   └── predict/            # Prediction skill
-    └── hooks/                  # Session setup
+MolAgentLight/
+└── MolAgent-Marketplace/           # Plugin marketplace
+    ├── .claude-plugin/
+    │   └── marketplace.json        # Marketplace catalog
+    └── plugins/
+        └── molagent-taskmanager/   # Claude Code plugin
+            ├── AutoMol/            # Bundled ML library
+            │   └── automol/automol/
+            │       ├── stacking.py
+            │       ├── feature_generators.py
+            │       └── model_search.py
+            ├── skills/
+            │   ├── train-pipeline/ # Training skill
+            │   └── predict/        # Prediction skill
+            └── hooks/              # Session setup
 ```
 
 ---
@@ -180,7 +213,7 @@ MolAgent relies on the following open-source projects:
 1. **[AutoMol](https://github.com/openanalytics/AutoMol)** — Core ML pipeline for QSAR/drug discovery
 2. **[scikit-learn](https://scikit-learn.org/)** — Pedregosa, F., et al. (2011). Scikit-learn: Machine learning in Python. JMLR, 12, 2825-2830.
 3. **[molfeat](https://molfeat.datamol.io/)** — Noutahi, E., et al. (2023). datamol-io/molfeat. Zenodo. https://doi.org/10.5281/zenodo.8373019
-5. **[RDKit](https://www.rdkit.org/)** — Open-source cheminformatics
+4. **[RDKit](https://www.rdkit.org/)** — Open-source cheminformatics
 
 ---
 
@@ -190,5 +223,5 @@ MolAgent relies on the following open-source projects:
 
 ## Contact
 
-- **Developers**: Joris Tavernier, Marvin Steijaert, Jose Carlos Gómez-Tamayo, Mazen Ahmad
-- **Email**: joris.tavernier@openanalytics.eu, Marvin.Steijaert@openanalytics.eu
+- **Developers**: Joris Tavernier, Marvin Steijaert
+- **Email**: joris.tavernier@openanalytics.eu
