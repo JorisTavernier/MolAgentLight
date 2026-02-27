@@ -110,8 +110,8 @@ Or:
 ```
 > /predict
 ```
-
 The predict skill will list the trained models from the registry. 
+
 ---
 
 ## Skills
