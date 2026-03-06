@@ -9,7 +9,7 @@
 
 **MolAgent Light is a Claude Code plugin for automated molecular property prediction**
 
-[Installation](#installation) • [Examples](#examples) • [Skills](#skills) • [Citation](#citation)
+[Installation](#installation) • [Examples](#examples) • [Skills](#skills) • [Visualization](#visualization) • [Citation](#citation)
 
 </div>
 
@@ -23,6 +23,7 @@ MolAgent Light enables expert-level molecular property prediction through natura
 - **Intelligent Feature Selection** — Automatically selects optimal molecular representations: 2D descriptors, ECFP fingerprints, and a pretrained ONNX encoder
 - **Portable ONNX Encoder** — The bottleneck encoder is exported to ONNX, making it lightweight, dependency-free, and portable across platforms
 - **On-the-fly Predictions** — Make predictions on new molecules using trained models
+- **Interactive Dashboards** — Visualize evaluation results with Plotly.js charts and molecular structure hover tooltips
 
 This is a lightweight version of [MolAgent](https://github.com/openanalytics/MolAgent) without MCP server dependencies, designed specifically for Claude Code.
 
@@ -42,16 +43,17 @@ git clone https://github.com/JorisTavernier/MolAgentLight.git
 cd MolAgentLight
 ```
 
-### Install the Plugin
+### Install the Plugins
 
 In Claude Code:
 
 ```
 /plugin marketplace add ./MolAgent-Marketplace
 /plugin install molagent-taskmanager@molagent-marketplace
+/plugin install molagent-visualizer@molagent-marketplace
 ```
 
-> **Note:** After installing the plugin, restart Claude Code so the SessionStart hook runs and sets up the virtual environment with AutoMol and the environment variables (only the first time). Then restart Claude Code a **second** time and you are good to go.
+> **Note:** After installing the plugins, restart Claude Code so the SessionStart hook runs and sets up the virtual environment with AutoMol and the environment variables (only the first time). Then restart Claude Code a **second** time and you are good to go.
 
 ---
 
@@ -91,6 +93,20 @@ Or:
 
 The predict skill will list trained models from the registry and run inference.
 
+### Visualize Results
+
+```
+> Visualize the evaluation results from my last training run
+```
+
+Or:
+
+```
+> /visualize
+```
+
+The visualize skill auto-discovers completed runs with evaluation data and generates an interactive HTML dashboard.
+
 ---
 
 ## Skills
@@ -129,6 +145,52 @@ Single-phase inference on new molecules using any trained model.
 
 ---
 
+### `visualize` — Interactive Dashboard
+
+Generates a self-contained HTML dashboard from evaluation results, powered by Plotly.js and SmilesDrawer.
+
+**Regression plots:**
+- Scatter with MAE bands
+- Scatter with moving average error
+- Scatter with cutoff classification (TP/FP/TN/FN)
+- Residual plot
+- Absolute error histogram
+- Error bar plot (stacked bins)
+- Threshold variation (accuracy/precision/recall sweep)
+- Hit enrichment curve
+
+**Classification plots:**
+- Confusion matrix heatmap
+- ROC curves (per class)
+- Precision-recall curves
+- Classification report heatmap
+- F1 threshold tuning
+- Calibration / reliability diagram
+- Hit enrichment curve
+- Probability bar plot
+
+**Highlights:**
+- **Molecular structure hover** — Hover over scatter points to see 2D molecular structures rendered client-side via SmilesDrawer
+- **Interactive sliders** — Adjust the regression cutoff and error histogram bin count in real time
+- **Property selector** — Switch between properties in multi-property runs
+- **Overview / Detailed presets** — Grid of all plots or single fullscreen plot
+- **Findings summary** — Copy-able text output with key metrics
+- **Self-contained** — Single HTML file, works offline after first load
+
+---
+
+## Visualization
+
+After training and evaluation, generate an interactive dashboard:
+
+```
+> /visualize
+```
+
+The dashboard opens in your default browser. All charts are interactive — zoom, pan, hover for details. Hover over scatter plot points to see the 2D molecular structure, true/predicted values, and error.
+
+---
+
 ## Computational Load Presets
 
 | Level | Description |
@@ -148,16 +210,21 @@ MolAgentLight/
     ├── .claude-plugin/
     │   └── marketplace.json        # Marketplace catalog
     └── plugins/
-        └── molagent-taskmanager/   # Claude Code plugin
-            ├── AutoMol/            # Bundled ML library
-            │   └── automol/automol/
-            │       ├── stacking.py
-            │       ├── feature_generators.py
-            │       └── model_search.py
+        ├── molagent-taskmanager/   # Training & prediction plugin
+        │   ├── AutoMol/            # Bundled ML library
+        │   │   └── automol/automol/
+        │   │       ├── stacking.py
+        │   │       ├── feature_generators.py
+        │   │       └── model_search.py
+        │   ├── skills/
+        │   │   ├── train-pipeline/ # Training skill
+        │   │   └── predict/        # Prediction skill
+        │   └── hooks/              # Session setup
+        └── molagent-visualizer/    # Visualization plugin
             ├── skills/
-            │   ├── train-pipeline/ # Training skill
-            │   └── predict/        # Prediction skill
-            └── hooks/              # Session setup
+            │   └── visualize/      # Dashboard skill
+            └── scripts/
+                └── generate_dashboard.py  # PEP 723 script
 ```
 
 ---
@@ -229,6 +296,8 @@ MolAgent relies on the following open-source projects:
 2. **[scikit-learn](https://scikit-learn.org/)** — Pedregosa, F., et al. (2011). Scikit-learn: Machine learning in Python. JMLR, 12, 2825-2830.
 3. **[molfeat](https://molfeat.datamol.io/)** — Noutahi, E., et al. (2023). datamol-io/molfeat. Zenodo. https://doi.org/10.5281/zenodo.8373019
 4. **[RDKit](https://www.rdkit.org/)** — Open-source cheminformatics
+5. **[Plotly.js](https://plotly.com/javascript/)** — Interactive charting library for the visualization dashboard
+6. **[SmilesDrawer](https://github.com/reymond-group/smilesDrawer)** — Probst, D. & Reymond, J.-L. (2018). SmilesDrawer: Parsing and Drawing SMILES-Encoded Molecular Structures Using Client-Side JavaScript. JCIM, 58(1), 1-7.
 
 ---
 

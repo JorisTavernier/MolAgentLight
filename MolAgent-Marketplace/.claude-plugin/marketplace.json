@@ -19,6 +19,18 @@
       "keywords": ["smiles", "ensemble", "stacking", "molecular-features"],
       "repository": "https://github.com/JorisTavernier/MolAgentLight",
       "strict": true
+    },
+    {
+      "name": "molagent-visualizer",
+      "source": "./plugins/molagent-visualizer",
+      "description": "Interactive HTML dashboard for AutoMol evaluation results — scatter plots, residuals, confusion matrices, ROC curves, powered by Plotly.js",
+      "version": "1.0.0",
+      "author": { "name": "MolAgent Team" },
+      "category": "scientific-computing",
+      "tags": ["drug-discovery", "visualization", "dashboard", "plotly"],
+      "keywords": ["evaluation", "metrics", "charts", "interactive"],
+      "repository": "https://github.com/JorisTavernier/MolAgentLight",
+      "strict": true
     }
   ]
 }

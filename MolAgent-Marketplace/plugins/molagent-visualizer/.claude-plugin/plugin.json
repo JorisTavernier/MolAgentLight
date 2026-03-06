@@ -1,0 +1,8 @@
+{
+  "name": "molagent-visualizer",
+  "version": "1.0.0",
+  "description": "Interactive HTML dashboard for AutoMol evaluation results — scatter plots, residuals, confusion matrices, ROC curves, all powered by Plotly.js",
+  "author": {"name": "MolAgent Team"},
+  "repository": "https://github.com/JorisTavernier/MolAgentLight",
+  "skills": ["./skills/visualize"]
+}
