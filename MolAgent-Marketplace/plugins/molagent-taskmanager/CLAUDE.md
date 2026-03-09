@@ -2,12 +2,13 @@
 
 ## Architecture
 
-This is a Claude Code plugin for the AutoMol molecular ML library. It has 2 skills (`train-pipeline`, `predict`) and a SessionStart hook.
+This is a Claude Code plugin for the AutoMol molecular ML library. It has 3 skills (`train-pipeline`, `predict`, `visualize`) and a SessionStart hook.
 
 ### Key Directories
 
 - `skills/train-pipeline/scripts/` — Python scripts invoked with `uv run script.py`. With the `.venv` activated, `uv run` uses it for all scripts.
 - `skills/predict/scripts/` — Prediction script, invoked the same way.
+- `skills/visualize/scripts/` — Dashboard generation script (PEP 723, self-contained dependencies).
 - `MolagentFiles/` — All pipeline outputs. Only `model_registry.json` is version-controlled.
 - `hooks/setup-automol-env.sh` — Exports `AUTOMOL_ROOT` (repo root) and `PLUGIN_ROOT` (plugin root) at session start.
 
@@ -105,7 +106,8 @@ Use `is not None` (not truthiness) when checking `blender_properties`. An empty 
     "merged_model_file": "MolagentFiles/.../merged_stackingregmodel.pt",
     "refitted_model_files": { "prop1": "MolagentFiles/.../prop1_refitted_stackingregmodel.pt" },
     "merged_refitted_model_file": "MolagentFiles/.../merged_refitted_stackingregmodel.pt",
-    "train_info": { "prop1": "MolagentFiles/.../prop1_train_info.json" }
+    "train_info": { "prop1": "MolagentFiles/.../prop1_train_info.json" },
+    "evaluation_results": { "prop1": "MolagentFiles/.../prop1_evaluation_predictions.csv" }
   },
   "metrics": {
     "prop1": { "r2": 0.85, "mse": 0.12 }
@@ -126,6 +128,7 @@ Use `is not None` (not truthiness) when checking `blender_properties`. An empty 
 | Refit (clf) | `{property}_refitted_stackingclfmodel.pt` |
 | Merge | `merged_stackingregmodel.pt` / `merged_refitted_stackingregmodel.pt` |
 | Predict | `{property}_predictions.csv` (individual) / `predictions.csv` (merged) |
+| Dashboard | `dashboard.html` (in run folder) |
 
 ## Merged Models
 

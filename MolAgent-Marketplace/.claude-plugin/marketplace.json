@@ -11,24 +11,12 @@
     {
       "name": "molagent-taskmanager",
       "source": "./plugins/molagent-taskmanager",
-      "description": "Train and deploy molecular property prediction models from SMILES data using ensemble stacking methods",
+      "description": "Train and deploy molecular property prediction models from SMILES data using ensemble stacking methods, with interactive Plotly.js dashboards for evaluation results",
       "version": "1.0.0",
       "author": { "name": "MolAgent Team" },
       "category": "scientific-computing",
-      "tags": ["drug-discovery", "qsar", "machine-learning", "cheminformatics"],
-      "keywords": ["smiles", "ensemble", "stacking", "molecular-features"],
-      "repository": "https://github.com/JorisTavernier/MolAgentLight",
-      "strict": true
-    },
-    {
-      "name": "molagent-visualizer",
-      "source": "./plugins/molagent-visualizer",
-      "description": "Interactive HTML dashboard for AutoMol evaluation results — scatter plots, residuals, confusion matrices, ROC curves, powered by Plotly.js",
-      "version": "1.0.0",
-      "author": { "name": "MolAgent Team" },
-      "category": "scientific-computing",
-      "tags": ["drug-discovery", "visualization", "dashboard", "plotly"],
-      "keywords": ["evaluation", "metrics", "charts", "interactive"],
+      "tags": ["drug-discovery", "qsar", "machine-learning", "cheminformatics", "visualization", "dashboard"],
+      "keywords": ["smiles", "ensemble", "stacking", "molecular-features", "plotly", "evaluation", "metrics"],
       "repository": "https://github.com/JorisTavernier/MolAgentLight",
       "strict": true
     }

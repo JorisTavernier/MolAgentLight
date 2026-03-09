@@ -55,7 +55,7 @@ After selection, display the run summary as above.
 Run the generation script:
 
 ```bash
-uv run ${CLAUDE_PLUGIN_ROOT}/scripts/generate_dashboard.py \
+uv run $PLUGIN_ROOT/skills/visualize/scripts/generate_dashboard.py \
     --pipeline-state {pipeline_state_path} \
     --output {run_folder}/dashboard.html \
     --verbose
@@ -96,7 +96,7 @@ The dashboard includes:
 
 ## Important Notes
 
-- `${CLAUDE_PLUGIN_ROOT}` is the plugin root directory, set by Claude Code when loaded as a plugin.
+- `$PLUGIN_ROOT` is the plugin root directory, set by the SessionStart hook and persisted to `settings.local.json`.
 - Python scripts: `uv run ...` (dependencies resolved via PEP 723 inline metadata)
 - The dashboard is a self-contained HTML file — no server needed, works offline after first load (Plotly.js CDN)
 - Only runs with completed evaluation (step 5) are eligible

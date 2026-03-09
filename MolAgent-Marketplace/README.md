@@ -6,7 +6,7 @@ Claude Code plugin marketplace for [MolAgent](https://github.com/JorisTavernier/
 
 | Plugin | Description | Version |
 |--------|-------------|---------|
-| **molagent-taskmanager** | Train and deploy molecular property prediction models from SMILES data using ensemble stacking methods | 1.0.0 |
+| **molagent-taskmanager** | Train and deploy molecular property prediction models from SMILES data using ensemble stacking methods, with interactive Plotly.js dashboards for evaluation results | 1.0.0 |
 
 ## Installation
 
@@ -61,10 +61,11 @@ export UV_NATIVE_TLS=true
 
 ## Usage
 
-Once installed, the plugin provides two skills:
+Once installed, the plugin provides three skills:
 
 - **`/train-pipeline`** — End-to-end training: detect dataset, prepare, split, train, evaluate, refit, and merge models
 - **`/predict`** — Inference with auto-discovered trained models
+- **`/visualize`** — Generate an interactive HTML dashboard from evaluation results
 
 ### Train a Model
 
@@ -88,6 +89,18 @@ Or invoke directly:
 
 ```
 > /predict
+```
+
+### Visualize Results
+
+```
+> Visualize the evaluation results from my last training run
+```
+
+Or invoke directly:
+
+```
+> /visualize
 ```
 
 ## Plugin Details

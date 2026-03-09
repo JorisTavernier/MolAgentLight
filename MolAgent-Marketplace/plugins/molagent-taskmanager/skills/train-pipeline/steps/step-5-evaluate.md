@@ -63,10 +63,18 @@ Update `pipeline_state.json` in the run folder:
     "prop1": { "R2": 0.85, "RMSE": 0.42, "MAE": 0.31 },
     "prop2": { "R2": 0.78, "RMSE": 0.55, "MAE": 0.40 }
   },
+  "outputs": {
+    "evaluation_results": {
+      "prop1": "{config.output_folder}/{prop1}_evaluation_predictions.csv",
+      "prop2": "{config.output_folder}/{prop2}_evaluation_predictions.csv"
+    }
+  },
   "steps_completed": [0, 1, 2, 3, 4, 5],
   "current_step": 6
 }
 ```
+
+`outputs.evaluation_results` is a **flat dict** mapping each property name to its predictions CSV path. This is the key the `visualize` skill's dashboard script reads.
 
 ## Summary Output
 
@@ -92,6 +100,7 @@ Step 5 complete: Model evaluated
 - State key is `"outputs"` (NOT `"files"`)
 - Model files are per-property dicts: `outputs.model_files.prop1` (NOT flat strings)
 - Metrics are per-property: `metrics.prop1.R2` (NOT flat `metrics.R2`)
+- **`outputs.evaluation_results` must be a flat dict** `{ "prop": "path/to/predictions.csv" }` — this is what the `visualize` skill reads. Do NOT nest it with info paths.
 - Paths: use `Path(dir) / filename` (NEVER f-string concatenation)
 - Read/update/write `pipeline_state.json` in the run folder
 - Scripts: `uv run $PLUGIN_ROOT/...` (always set via .claude/settings.local.json)

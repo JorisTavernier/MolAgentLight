@@ -17,6 +17,6 @@
       }
     ]
   },
-  "skills": ["./skills/train-pipeline", "./skills/predict"],
+  "skills": ["./skills/train-pipeline", "./skills/predict", "./skills/visualize"],
   "commands": ["./commands/automol-status.md"]
 }

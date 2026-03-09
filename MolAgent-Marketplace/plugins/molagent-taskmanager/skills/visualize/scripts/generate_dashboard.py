@@ -669,7 +669,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 12px;
-    overflow: hidden;
+    overflow: visible;
     margin-bottom: 20px;
   }
   .plot-grid {
@@ -1140,7 +1140,7 @@ function renderPlots(d) {
   if (currentPreset === 'overview') {
     area.className = 'plot-grid';
     plots.forEach(p => {
-      const container = makeContainer(PLOT_LABELS[p]);
+      const container = makeContainer(PLOT_LABELS[p], 480);
       area.appendChild(container);
       const div = container.querySelector('.plot-div');
       renderSinglePlot(div, p, d);
@@ -1148,7 +1148,7 @@ function renderPlots(d) {
     });
   } else {
     area.className = 'plot-grid single';
-    const container = makeContainer(PLOT_LABELS[currentPlotType]);
+    const container = makeContainer(PLOT_LABELS[currentPlotType], 720);
     area.appendChild(container);
     const div = container.querySelector('.plot-div');
     renderSinglePlot(div, currentPlotType, d, true);
@@ -1156,10 +1156,10 @@ function renderPlots(d) {
   }
 }
 
-function makeContainer(title) {
+function makeContainer(title, height) {
   const c = document.createElement('div');
   c.className = 'plot-container';
-  c.innerHTML = `<div class="plot-title-bar">${title}</div><div class="plot-div" style="width:100%;height:500px"></div>`;
+  c.innerHTML = `<div class="plot-title-bar">${title}</div><div class="plot-div" style="width:100%;height:${height}px"></div>`;
   return c;
 }
 
@@ -1483,7 +1483,16 @@ function plotClfReport(div, d, large) {
 
   const traces = [{
     z: rpt.z, x: rpt.col_labels, y: rpt.row_labels,
-    type: 'heatmap', colorscale: 'RdYlGn',
+    type: 'heatmap',
+    colorscale: [
+      [0.00, '#b2182b'],
+      [0.20, '#d6604d'],
+      [0.40, '#d4b8b0'],
+      [0.50, '#f7f7f7'],
+      [0.65, '#a8d4a8'],
+      [0.80, '#4dac26'],
+      [1.00, '#1a7a1a'],
+    ],
     zmin: 0.3, zmax: 1.0,
     text: rpt.z.map(row => row.map(v => v !== null ? v.toString() : '')),
     texttemplate: '%{text}',

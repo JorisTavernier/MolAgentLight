@@ -57,6 +57,16 @@ Single-phase inference skill:
 4. Runs `predict.py` — merged models predict all properties in one call; individual models run once per property
 5. Outputs `predictions.csv` (merged) or `{property}_predictions.csv` (individual)
 
+### visualize
+
+Single-phase dashboard skill:
+
+1. Auto-discovers completed runs with evaluation data
+2. Selects run (auto if only one, asks if multiple)
+3. Runs `generate_dashboard.py` — PEP 723 script with self-contained dependencies
+4. Generates a self-contained HTML dashboard with Plotly.js charts and SmilesDrawer molecular structure tooltips
+5. Opens the dashboard in the default browser
+
 ## Model Merging
 
 When training multiple target properties (e.g., gamma1, gamma2, gamma3), AutoMol saves one `.pt` file per property — but each contains the full model including the pretrained encoder (~10MB). For 3 properties, this means 3x encoder duplication: ~36MB instead of ~16MB.
@@ -90,6 +100,10 @@ molagent-taskmanager/
       SKILL.md               # Skill definition
       scripts/
         predict.py           # Inference script
+    visualize/
+      SKILL.md               # Skill definition
+      scripts/
+        generate_dashboard.py  # PEP 723 dashboard script
   MolagentFiles/             # Pipeline outputs (gitignored except registry)
     model_registry.json      # Trained model registry
 ```

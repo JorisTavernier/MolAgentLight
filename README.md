@@ -43,17 +43,16 @@ git clone https://github.com/JorisTavernier/MolAgentLight.git
 cd MolAgentLight
 ```
 
-### Install the Plugins
+### Install the Plugin
 
 In Claude Code:
 
 ```
 /plugin marketplace add ./MolAgent-Marketplace
 /plugin install molagent-taskmanager@molagent-marketplace
-/plugin install molagent-visualizer@molagent-marketplace
 ```
 
-> **Note:** After installing the plugins, restart Claude Code so the SessionStart hook runs and sets up the virtual environment with AutoMol and the environment variables (only the first time). Then restart Claude Code a **second** time and you are good to go.
+> **Note:** After installing the plugin, restart Claude Code so the SessionStart hook runs and sets up the virtual environment with AutoMol and the environment variables (only the first time). Then restart Claude Code a **second** time and you are good to go.
 
 ---
 
@@ -210,21 +209,19 @@ MolAgentLight/
     ├── .claude-plugin/
     │   └── marketplace.json        # Marketplace catalog
     └── plugins/
-        ├── molagent-taskmanager/   # Training & prediction plugin
-        │   ├── AutoMol/            # Bundled ML library
-        │   │   └── automol/automol/
-        │   │       ├── stacking.py
-        │   │       ├── feature_generators.py
-        │   │       └── model_search.py
-        │   ├── skills/
-        │   │   ├── train-pipeline/ # Training skill
-        │   │   └── predict/        # Prediction skill
-        │   └── hooks/              # Session setup
-        └── molagent-visualizer/    # Visualization plugin
+        └── molagent-taskmanager/   # Training, prediction & visualization plugin
+            ├── AutoMol/            # Bundled ML library
+            │   └── automol/automol/
+            │       ├── stacking.py
+            │       ├── feature_generators.py
+            │       └── model_search.py
             ├── skills/
+            │   ├── train-pipeline/ # Training skill
+            │   ├── predict/        # Prediction skill
             │   └── visualize/      # Dashboard skill
-            └── scripts/
-                └── generate_dashboard.py  # PEP 723 script
+            │       └── scripts/
+            │           └── generate_dashboard.py  # PEP 723 script
+            └── hooks/              # Session setup
 ```
 
 ---
