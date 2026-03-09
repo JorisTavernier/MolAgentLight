@@ -42,7 +42,7 @@ def save_registry(directory, entries):
 
 
 def generate_model_id(dataset_stem, prop, timestamp, existing_ids):
-    ts_str = timestamp.strftime("%Y%m%d-%H%M")
+    ts_str = timestamp.strftime("%Y%m%d_%H%M")
     base_id = f"{dataset_stem}-{prop}-{ts_str}"
     if base_id not in existing_ids:
         return base_id

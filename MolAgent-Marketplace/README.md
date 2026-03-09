@@ -6,7 +6,7 @@ Claude Code plugin marketplace for [MolAgent](https://github.com/JorisTavernier/
 
 | Plugin | Description | Version |
 |--------|-------------|---------|
-| **molagent-taskmanager** | Train and deploy molecular property prediction models from SMILES data using ensemble stacking methods, with interactive Plotly.js dashboards for evaluation results | 1.0.0 |
+| **MolAgentLight** | Train and deploy molecular property prediction models from SMILES data using ensemble stacking methods, with interactive Plotly.js dashboards for evaluation results | 1.0.0 |
 
 ## Installation
 
@@ -21,7 +21,7 @@ Then in Claude Code:
 
 ```
 /plugin marketplace add ./MolAgent-Marketplace
-/plugin install molagent-taskmanager@molagent-marketplace
+/plugin install MolAgentLight@molagent-marketplace
 ```
 
 > **Note:** After installing the plugin, restart Claude Code so the SessionStart hook runs and sets up the virtual environment with AutoMol.
@@ -32,7 +32,7 @@ In Claude Code:
 
 ```
 /plugin marketplace add https://github.com/JorisTavernier/MolAgentLight/tree/main/MolAgent-Marketplace
-/plugin install molagent-taskmanager@molagent-marketplace
+/plugin install MolAgentLight@molagent-marketplace
 ```
 
 > **Note:** After installing the plugin, restart Claude Code so the SessionStart hook runs and sets up the virtual environment with AutoMol.
@@ -105,7 +105,7 @@ Or invoke directly:
 
 ## Plugin Details
 
-See [molagent-taskmanager README](plugins/molagent-taskmanager/README.md) for full documentation on:
+See [MolAgentLight README](MolAgentLight/README.md) for full documentation on:
 
 - Supported skills and their options
 - Computational load presets (free, cheap, moderate, expensive)
@@ -114,4 +114,4 @@ See [molagent-taskmanager README](plugins/molagent-taskmanager/README.md) for fu
 
 ## Maintenance
 
-Development happens directly in `plugins/molagent-taskmanager/`. The AutoMol library is bundled at `plugins/molagent-taskmanager/AutoMol/automol/` and is auto-installed by the SessionStart hook.
+Development happens directly in `MolAgentLight/`. The AutoMol library is bundled at `MolAgentLight/AutoMol/automol/` and is auto-installed by the SessionStart hook.

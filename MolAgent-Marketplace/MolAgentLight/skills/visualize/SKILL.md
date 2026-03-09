@@ -69,9 +69,14 @@ Where:
 
 ## Step 4: Open Dashboard
 
-Open the generated HTML in the default browser:
+Open the generated HTML in the default browser (detect platform):
 
 ```bash
+# macOS
+open {run_folder}/dashboard.html
+# Linux
+xdg-open {run_folder}/dashboard.html
+# Windows
 start {run_folder}/dashboard.html
 ```
 

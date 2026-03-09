@@ -1704,7 +1704,23 @@ def render_dashboard(
     for prop, pdata in property_data.items():
         data_dict[prop] = pdata
 
-    data_json = json.dumps(data_dict, allow_nan=False, default=str)
+    def sanitize_for_json(obj):
+        """Replace NaN/Inf/numpy scalars with JSON-safe equivalents."""
+        if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+            return None
+        if isinstance(obj, np.floating):
+            v = float(obj)
+            return None if (math.isnan(v) or math.isinf(v)) else v
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, dict):
+            return {k: sanitize_for_json(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [sanitize_for_json(v) for v in obj]
+        return obj
+
+    data_dict = sanitize_for_json(data_dict)
+    data_json = json.dumps(data_dict, default=str)
 
     template = Template(HTML_TEMPLATE)
     html = template.render(

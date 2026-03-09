@@ -1,5 +1,5 @@
 {
-  "name": "molagent-taskmanager",
+  "name": "MolAgentLight",
   "version": "1.0.0",
   "description": "Claude Code plugin for AutoMol drug discovery pipeline - train molecular property prediction models from SMILES data using ensemble stacking methods",
   "author":

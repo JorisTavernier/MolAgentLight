@@ -11,8 +11,8 @@ if [ -n "$CLAUDE_PROJECT_DIR" ]; then AUTOMOL_ROOT="$CLAUDE_PROJECT_DIR"; else A
 
 if [ -n "$CLAUDE_PLUGIN_ROOT" ]; then
   PLUGIN_ROOT="$CLAUDE_PLUGIN_ROOT"
-elif [ -d "$AUTOMOL_ROOT/MolAgent-Marketplace/plugins/molagent-taskmanager/skills" ]; then
-  PLUGIN_ROOT="$AUTOMOL_ROOT/MolAgent-Marketplace/plugins/molagent-taskmanager"
+elif [ -d "$AUTOMOL_ROOT/MolAgent-Marketplace/MolAgentLight/skills" ]; then
+  PLUGIN_ROOT="$AUTOMOL_ROOT/MolAgent-Marketplace/MolAgentLight"
 else
   PLUGIN_ROOT="$AUTOMOL_ROOT"
 fi

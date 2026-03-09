@@ -83,6 +83,7 @@ MolagentFiles/
     "model_files": {},
     "merged_model_file": null,
     "train_info": {},
+    "evaluation_results": {},
     "refitted_model_files": {},
     "merged_refitted_model_file": null,
     "model_card": null

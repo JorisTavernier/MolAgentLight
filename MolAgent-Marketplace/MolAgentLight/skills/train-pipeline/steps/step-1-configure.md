@@ -15,7 +15,7 @@ recs = detection["recommendations"]
 
 # Derive n_jobs from computational_load
 n_jobs_map = {
-    "free": {"outer": 1, "inner": 2, "method": 1},
+    "free": {"outer": 1, "inner": 1, "method": 1},
     "cheap": {"outer": 1, "inner": 2, "method": 2},
     "moderate": {"outer": -1, "inner": 2, "method": 2},
     "expensive": {"outer": -1, "inner": -1, "method": 2},
@@ -251,6 +251,7 @@ Write the full state to `{run_folder}/pipeline_state.json` (inside the run folde
     "split_csv": null, "split_info": null,
     "model_files": {}, "merged_model_file": null,
     "train_info": {},
+    "evaluation_results": {},
     "refitted_model_files": {}, "merged_refitted_model_file": null,
     "model_card": null
   },
