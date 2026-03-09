@@ -6,8 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is the repository for **MolAgent** — automated molecular property prediction. All code lives under `MolAgent-Marketplace/`:
 
-- **`MolAgent-Marketplace/plugins/molagent-taskmanager/`** — Claude Code plugin that exposes AutoMol through natural language skills, including interactive Plotly.js dashboards for evaluation results
-- **`MolAgent-Marketplace/plugins/molagent-taskmanager/AutoMol/automol/`** — Bundled copy of the AutoMol core ML library (stacking ensemble models, molecular feature generators)
+- **`MolAgent-Marketplace/MolAgentLight/`** — Claude Code plugin that exposes AutoMol through natural language skills, including interactive Plotly.js dashboards for evaluation results
+- **`MolAgent-Marketplace/MolAgentLight/AutoMol/automol/`** — Bundled copy of the AutoMol core ML library (stacking ensemble models, molecular feature generators)
 
 ## Installation
 
@@ -15,7 +15,7 @@ Install the plugins via the Claude Code marketplace:
 
 ```
 /plugin marketplace add ./MolAgent-Marketplace
-/plugin install molagent-taskmanager@molagent-marketplace
+/plugin install MolAgentLight@molagent-marketplace
 ```
 
 > **Note:** After installing the plugin, restart Claude Code so the SessionStart hook runs and sets up the virtual environment with AutoMol.
@@ -23,10 +23,10 @@ Install the plugins via the Claude Code marketplace:
 For manual installation of the core library:
 
 ```bash
-pip install -e MolAgent-Marketplace/plugins/molagent-taskmanager/AutoMol/automol/
+pip install -e MolAgent-Marketplace/MolAgentLight/AutoMol/automol/
 ```
 
-The SessionStart hook in `MolAgent-Marketplace/plugins/molagent-taskmanager/hooks/setup-automol-env.sh` auto-creates a `.venv` if missing.
+The SessionStart hook in `MolAgent-Marketplace/MolAgentLight/hooks/setup-automol-env.sh` auto-creates a `.venv` if missing.
 
 ### Windows Troubleshooting
 
@@ -66,7 +66,7 @@ ${AUTOMOL_VENV:-.venv}/Scripts/activate
 
 ### AutoMol Library
 
-The core library (`MolAgent-Marketplace/plugins/molagent-taskmanager/AutoMol/automol/automol/`) provides:
+The core library (`MolAgent-Marketplace/MolAgentLight/AutoMol/automol/automol/`) provides:
 
 - **stacking.py** — Main `StackingRegressor` and `StackingClassifier` classes with ensemble methods
 - **feature_generators.py** — Molecular feature generators:
@@ -80,7 +80,7 @@ Key pattern: Models are saved as `.pt` files containing the full ensemble. Multi
 
 ### Claude Code Plugins
 
-**molagent-taskmanager** — Located in `MolAgent-Marketplace/plugins/molagent-taskmanager/`. Three skills:
+**MolAgentLight** — Located in `MolAgent-Marketplace/MolAgentLight/`. Three skills:
 
 - **train-pipeline** — End-to-end training: detect → prepare → split → train → evaluate → refit → merge
 - **predict** — Inference with auto-discovered models
@@ -90,7 +90,7 @@ Pipeline outputs go to `MolagentFiles/{run_id}/` with a global `model_registry.j
 
 The dashboard script (`skills/visualize/scripts/generate_dashboard.py`) is a PEP 723 script with inline dependencies (click, pandas, numpy, scikit-learn, jinja2, scipy). It reads `pipeline_state.json` and evaluation CSVs, computes derived metrics in Python, and renders a self-contained HTML file with Plotly.js charts and SmilesDrawer molecular structure hover tooltips. Dashboard outputs go to `MolagentFiles/{run_id}/dashboard.html`.
 
-See `MolAgent-Marketplace/plugins/molagent-taskmanager/CLAUDE.md` for detailed plugin architecture.
+See `MolAgent-Marketplace/MolAgentLight/CLAUDE.md` for detailed plugin architecture.
 
 ## Key Conventions
 
@@ -104,9 +104,9 @@ See `MolAgent-Marketplace/plugins/molagent-taskmanager/CLAUDE.md` for detailed p
 
 `MolAgent-Marketplace/` is the sole distribution directory. It contains the marketplace catalog and the plugins with the bundled AutoMol library.
 
-- **`MolAgent-Marketplace/.claude-plugin/marketplace.json`** — Marketplace catalog
-- **`MolAgent-Marketplace/plugins/molagent-taskmanager/`** — Training, prediction & visualization plugin (skills, hooks, scripts)
-- **`MolAgent-Marketplace/plugins/molagent-taskmanager/AutoMol/automol/`** — Bundled AutoMol library (auto-installed by the SessionStart hook)
+- **`MolAgent-Marketplace/.claude-plugin/marketplace.json`** — Marketplace catalog (also mirrored at root `.claude-plugin/marketplace.json`)
+- **`MolAgent-Marketplace/MolAgentLight/`** — Training, prediction & visualization plugin (skills, hooks, scripts)
+- **`MolAgent-Marketplace/MolAgentLight/AutoMol/automol/`** — Bundled AutoMol library (auto-installed by the SessionStart hook)
 
 ## Computational Load Presets
 

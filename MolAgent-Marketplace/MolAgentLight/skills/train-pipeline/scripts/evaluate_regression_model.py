@@ -237,10 +237,8 @@ def main(**kwargs):
     if verbose:
         print(f'Loading model from: {model_file}')
 
-    print('bloep')
     stacked_model = load_model(model_file, use_gpu=False)
 
-    print('bloep1')
     # Display 3D feature information if present
     if verbose:
         feature_generators = stacked_model.feature_generators

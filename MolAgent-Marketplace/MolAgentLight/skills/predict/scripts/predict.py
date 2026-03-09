@@ -1,5 +1,6 @@
 
 from pathlib import Path
+from datetime import datetime
 import click
 import json
 import re
@@ -73,10 +74,10 @@ def main(**kwargs):
             --properties gamma1 --properties gamma3 \\
             --smiles-file new_molecules.csv
 
-        # Predict from command-line SMILES
-        uv run python predict.py \\
+        # Predict from command-line SMILES (repeat --smiles-list for each)
+        uv run predict.py \\
             --model-file MolagentFiles/Y_stackingregmodel.pt \\
-            --smiles-list "CCO" "c1ccccc1" "CC(C)CC(=O)O"
+            --smiles-list "CCO" --smiles-list "c1ccccc1" --smiles-list "CC(C)CC(=O)O"
 
         # Single SMILES prediction
         uv run python predict.py \\
@@ -163,10 +164,14 @@ def main(**kwargs):
     else:
         raise ValueError('Must provide either --smiles-file or at least one --smiles-list')
 
-    # Convert single SMILES to list
-    if len(smiles_list) == 1 and isinstance(smiles_list[0], str):
-        # Still keep as list for consistent processing
-        pass
+    # Filter out NaN/empty SMILES
+    original_count = len(smiles_list)
+    smiles_list = [s for s in smiles_list if pd.notna(s) and str(s).strip()]
+    if len(smiles_list) < original_count:
+        dropped = original_count - len(smiles_list)
+        print(f'Warning: Dropped {dropped} empty/NaN SMILES ({len(smiles_list)} remaining)')
+    if not smiles_list:
+        raise ValueError('No valid SMILES provided after filtering NaN/empty values')
 
     # Load model
     if verbose:
@@ -257,19 +262,16 @@ def main(**kwargs):
     if not Path(train_info_path).exists():
         train_info_path = model_file.replace('.pt', '_train_info.json')
 
-    blender_properties = []
+    train_info = {}
     if Path(train_info_path).exists():
         with open(train_info_path) as f:
             train_info = json.load(f)
-        # Auto-detect from train info or use CLI override
-        if kwargs.get('blender_properties'):
-            blender_properties = list(kwargs['blender_properties'])
-        else:
-            blender_properties = train_info.get('blender_properties', [])
-    else:
-        # CLI override only
-        if kwargs.get('blender_properties'):
-            blender_properties = list(kwargs['blender_properties'])
+
+    blender_properties = []
+    if kwargs.get('blender_properties'):
+        blender_properties = list(kwargs['blender_properties'])
+    elif train_info:
+        blender_properties = train_info.get('blender_properties', [])
 
     if blender_properties:
         if verbose:
@@ -319,9 +321,8 @@ def main(**kwargs):
     if verbose:
         print(f'Generating predictions for {len(smiles_list)} SMILES...')
 
-    # Determine convert_log10 based on model type and training
-    # For classification, always False
-    convert_log10 = False if is_classification else True
+    # Only back-transform if the model was actually trained on log10-transformed targets
+    convert_log10 = False if is_classification else train_info.get('use_log10', False)
 
     predictions = stacked_model.predict(
         props=properties_to_predict,
@@ -381,12 +382,13 @@ def main(**kwargs):
         for col in other_columns:
             output_df[col] = input_df[col].values
 
-    # Determine output filename
+    # Determine output filename with timestamp to avoid overwrites
+    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
     if output_file is None:
         if is_merged:
-            output_file = 'predictions.csv'
+            output_file = f'predictions_{ts}.csv'
         else:
-            output_file = f'{properties_to_predict[0]}_predictions.csv'
+            output_file = f'{properties_to_predict[0]}_predictions_{ts}.csv'
 
     output_path = str(Path(output_folder) / output_file)
 
@@ -400,8 +402,8 @@ def main(**kwargs):
         print('\nSample predictions:')
         print(output_df.head(min(5, len(output_df))).to_string(index=False))
 
-    # Save prediction info JSON
-    info_path = str(Path(output_folder) / 'predictions_info.json')
+    # Save prediction info JSON (timestamped to avoid overwrites)
+    info_path = str(Path(output_folder) / f'predictions_info_{ts}.json')
 
     prediction_info = {
         'model_file': str(Path(model_file).name),

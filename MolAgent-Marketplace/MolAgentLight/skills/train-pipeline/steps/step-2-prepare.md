@@ -34,7 +34,13 @@ uv run $PLUGIN_ROOT/skills/train-pipeline/scripts/prepare_for_regression.py \
     --verbose
 ```
 
-Add `--blender-properties {bp}` for each blender property if any. Add `--use-log10` to transform the target using log10, the transformed target will be under `log10_{target}`, for more data preparation options use add `--help` to see all commandline options
+Add `--blender-properties {bp}` for each blender property if any.
+
+**Target Transformations**: Check `config.target_transformations` in `pipeline_state.json`. If it contains a transform for any target:
+- `"log10"` → add `--use-log10` flag. The transformed target will be `log10_{target}`.
+- `"yeo_johnson"` → no script flag needed (handled internally by the training step). Note this in the summary.
+
+For more data preparation options add `--help` to see all command-line options.
 
 ### Classification
 

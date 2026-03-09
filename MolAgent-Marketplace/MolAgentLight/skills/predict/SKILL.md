@@ -120,7 +120,10 @@ For CLI SMILES with blender properties, add `--blender-values {prop}={value}` â€
 
 ## Step 6: Show Results
 
-1. Read the output CSV file (merged: `MolagentFiles/predictions.csv`, individual: `MolagentFiles/{property}_predictions.csv`)
+1. Read the output CSV file. The filename is timestamped to avoid overwrites â€” glob for the most recent file:
+   - Merged model: `MolagentFiles/predictions_*.csv` (latest by modification time)
+   - Individual model: `MolagentFiles/{property}_predictions_*.csv` (latest by modification time)
+   - Or read the path from the `predictions_info_*.json` file written alongside the CSV
 2. Display a table of the first 5-10 predictions
 3. Report total count and output file path
 

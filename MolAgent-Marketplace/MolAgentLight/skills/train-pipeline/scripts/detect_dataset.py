@@ -272,9 +272,9 @@ def count_valid_smiles(df, smiles_column):
 
 def recommend_computational_load(n_samples, n_targets, has_3d, task_type):
     """Recommend computational load based on dataset characteristics."""
-    if n_samples < 200:
+    if n_samples < 100:
         return "free", "Very small dataset — fast single-model signal check recommended"
-    if n_samples < 1000:
+    if n_samples < 500:
         return "cheap", "Small dataset — extensive search won't improve results"
     if has_3d and n_samples >= 1000:
         return "expensive", "Large 3D dataset benefits from full search"
