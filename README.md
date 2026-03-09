@@ -45,23 +45,23 @@ This is a lightweight version of [MolAgent](https://github.com/openanalytics/Mol
 
 ```mermaid
 flowchart TD
-    A([Your CSV + natural language]) --> B[Detect dataset\nSMILES column · targets · task type]
+    A([Your CSV + natural language]) --> B[Detect dataset<br/>SMILES column · targets · task type]
     B --> C{Auto-configure plan}
-    C --> D[Present plan to user\nfeatures · load · split strategy]
+    C --> D[Present plan to user<br/>features · load · split strategy]
     D --> E{User approves?}
     E -->|Yes| F[Create Claude Code tasks]
-    E -->|No| G[Save plan\nresume later]
+    E -->|No| G[Save plan<br/>resume later]
 
-    F --> H[Step 2: Prepare\nstandardize SMILES · transforms]
-    H --> I[Step 3: Split\nButina clustering · stratified]
-    I --> J[Step 4: Train\nnested CV · stacking ensemble]
-    J --> K[Step 5: Evaluate\ntest set metrics]
+    F --> H[Step 2: Prepare<br/>standardize SMILES · transforms]
+    H --> I[Step 3: Split<br/>Butina clustering · stratified]
+    I --> J[Step 4: Train<br/>nested CV · stacking ensemble]
+    J --> K[Step 5: Evaluate<br/>test set metrics]
     K --> L{Review checkpoint}
-    L --> M[Step 7: Refit\nfull dataset]
-    M --> N[Step 8: Register model\nmodel card · registry]
+    L --> M[Step 7: Refit<br/>full dataset]
+    M --> N[Step 8: Register model<br/>model card · registry]
 
-    N --> O([Interactive dashboard\nPlotly.js · SmilesDrawer])
-    N --> P([Predictions CSV\nwith uncertainty estimates])
+    N --> O([Interactive dashboard<br/>Plotly.js · SmilesDrawer])
+    N --> P([Predictions CSV<br/>with uncertainty estimates])
 
     style F fill:#4f46e5,color:#fff
     style L fill:#059669,color:#fff
@@ -109,14 +109,14 @@ flowchart LR
 
     subgraph FeatureGeneration["Feature Generation (parallel)"]
         direction TB
-        A["Bottleneck Encoder\n(ONNX Runtime)\n~10 MB · no PyTorch\n128-dim embedding"]
-        B["ECFP Fingerprints\n(RDKit)\n2048-bit · circular\nsubstructure patterns"]
-        C["RDKit Descriptors\n(RDKit)\n200+ physicochemical\nMW · LogP · TPSA ..."]
+        A["Bottleneck Encoder<br/>(ONNX Runtime)<br/>~10 MB · no PyTorch<br/>128-dim embedding"]
+        B["ECFP Fingerprints<br/>(RDKit)<br/>2048-bit · circular<br/>substructure patterns"]
+        C["RDKit Descriptors<br/>(RDKit)<br/>200+ physicochemical<br/>MW · LogP · TPSA ..."]
     end
 
     subgraph Ensemble["Stacking Ensemble"]
-        D["Base Estimators\nSVR · LightGBM · XGBoost\nKernelRidge · Lasso · PLS"]
-        E["Meta-learner\nKernelRidge blender"]
+        D["Base Estimators<br/>SVR · LightGBM · XGBoost<br/>KernelRidge · Lasso · PLS"]
+        E["Meta-learner<br/>KernelRidge blender"]
     end
 
     S --> A
@@ -204,10 +204,10 @@ Auto-discovers trained models from the registry. Accepts CSV files or individual
 ```mermaid
 flowchart LR
     A([model_registry.json]) --> B{Select model}
-    C([CSV file\nor SMILES strings]) --> D[predict.py]
+    C([CSV file<br/>or SMILES strings]) --> D[predict.py]
     B --> D
-    D --> E["ONNX Encoder\n+ stacking ensemble"]
-    E --> F([predictions_timestamp.csv\n+ uncertainty SD])
+    D --> E["ONNX Encoder<br/>+ stacking ensemble"]
+    E --> F([predictions_timestamp.csv<br/>+ uncertainty SD])
     E --> G([predictions_info_timestamp.json])
 
     style E fill:#7c3aed,color:#fff
@@ -232,13 +232,13 @@ Generates a **self-contained HTML file** with Plotly.js charts and SmilesDrawer 
 
 ```mermaid
 flowchart LR
-    A([pipeline_state.json\n+ evaluation CSVs]) --> B[generate_dashboard.py\nPEP 723 · self-contained]
-    B --> C([dashboard.html\nself-contained · works offline])
+    A([pipeline_state.json<br/>+ evaluation CSVs]) --> B[generate_dashboard.py<br/>PEP 723 · self-contained]
+    B --> C([dashboard.html<br/>self-contained · works offline])
     C --> D{Interactive features}
-    D --> E[Hover → 2D structure\nvia SmilesDrawer]
-    D --> F[Cutoff slider\nTP/FP/TN/FN live update]
-    D --> G[Property selector\nmulti-target runs]
-    D --> H[Findings summary\ncopy-paste ready]
+    D --> E[Hover → 2D structure<br/>via SmilesDrawer]
+    D --> F[Cutoff slider<br/>TP/FP/TN/FN live update]
+    D --> G[Property selector<br/>multi-target runs]
+    D --> H[Findings summary<br/>copy-paste ready]
 
     style C fill:#0891b2,color:#fff
 ```
@@ -276,8 +276,8 @@ In Claude Code:
 | -------- | ----------- | ----------- |
 | `free` | 0–2 min | Single LightGBM — fast signal check, no ensemble |
 | `cheap` | 2–10 min | Light ensemble, basic search — quick prototyping |
-| `moderate` | 10–360 min | Stacking ensemble, randomized search — good balance |
-| `expensive` | 1–48 hrs | Full stacking, Bayesian HyperOpt — maximum accuracy |
+| `moderate` | 10–360 min | Light ensemble, tree methods, randomized search — good balance |
+| `expensive` | 1–48 hrs | Stacking ensemble, Bayesian HyperOpt — maximum accuracy |
 
 Detection auto-recommends a preset based on dataset size. You confirm (or change) with one question.
 
@@ -328,7 +328,7 @@ By default the plugin creates `.venv` in the project root. Override with:
 export AUTOMOL_VENV=/path/to/your/venv
 ```
 
-### Windows: `uv` Not Found
+### Windows: `uv` or `python` Not Found
 
 Add the Python Scripts directory to your PATH:
 
@@ -337,7 +337,7 @@ export PATH="$HOME/AppData/Roaming/Python/PythonXX/Scripts:$PATH"
 ```
 
 ### Windows: Corporate Proxy
-
+When behind a proxy, let uv use the native certificates:
 ```bash
 export UV_NATIVE_TLS=true
 ```
