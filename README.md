@@ -266,7 +266,7 @@ In Claude Code:
 /plugin install MolAgentLight@molagent-marketplace
 ```
 
-> **Note:** After installing, restart Claude Code once so the SessionStart hook creates the virtual environment and installs AutoMol. Then restart a **second** time — this injects `$PLUGIN_ROOT` into all Bash calls (including subagents) via `.claude/settings.local.json`.
+> **Note:** After installing, restart Claude Code once so the SessionStart hook creates the virtual environment and installs AutoMol. Then restart a **second** time — this injects `$MOLAGENT_PLUGIN_ROOT` into all Bash calls (including subagents) via `.claude/settings.local.json`.
 
 ---
 
@@ -300,7 +300,7 @@ MolAgentLight/
 │       │       ├── feature_generators.py        # ONNX + ECFP + RDKit
 │       │       └── model_search.py              # Nested CV + HyperOpt
 │       ├── hooks/
-│       │   └── setup-automol-env.sh  # SessionStart: venv + PLUGIN_ROOT
+│       │   └── setup-automol-env.sh  # SessionStart: venv + MOLAGENT_PLUGIN_ROOT
 │       └── skills/
 │           ├── train-pipeline/       # 8-step training orchestrator
 │           │   ├── SKILL.md

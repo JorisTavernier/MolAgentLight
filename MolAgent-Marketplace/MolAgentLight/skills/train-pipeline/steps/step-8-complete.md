@@ -11,7 +11,7 @@ Generate the model card, register the model, display final summary, and mark pip
 Run the model card generation script:
 
 ```bash
-uv run $PLUGIN_ROOT/skills/train-pipeline/scripts/generate_model_card.py \
+uv run $MOLAGENT_PLUGIN_ROOT/skills/train-pipeline/scripts/generate_model_card.py \
     --pipeline-state {config.output_folder}/pipeline_state.json
 ```
 
@@ -27,7 +27,7 @@ This creates `{config.output_folder}/model_card.md` with:
 Register the trained model in the model registry for discoverability by the predict skill:
 
 ```bash
-uv run $PLUGIN_ROOT/skills/train-pipeline/scripts/model_registry.py register \
+uv run $MOLAGENT_PLUGIN_ROOT/skills/train-pipeline/scripts/model_registry.py register \
     --pipeline-state {config.output_folder}/pipeline_state.json
 ```
 

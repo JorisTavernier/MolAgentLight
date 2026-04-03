@@ -15,7 +15,7 @@ Analyze the user's CSV file to detect:
 Run the detection script and capture JSON output:
 
 ```bash
-uv run $PLUGIN_ROOT/skills/train-pipeline/scripts/detect_dataset.py \
+uv run $MOLAGENT_PLUGIN_ROOT/skills/train-pipeline/scripts/detect_dataset.py \
     --csv-file {data_file}
 ```
 

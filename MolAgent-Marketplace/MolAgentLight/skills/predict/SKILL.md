@@ -91,7 +91,7 @@ Build the command from the registry entry. The approach depends on `model_format
 Single invocation predicts all properties at once:
 
 ```bash
-uv run $PLUGIN_ROOT/skills/predict/scripts/predict.py \
+uv run $MOLAGENT_PLUGIN_ROOT/skills/predict/scripts/predict.py \
     --model-file {model_file} \
     {--smiles-file INPUT_CSV | --smiles-list "SMILES1" --smiles-list "SMILES2"} \
     --output-folder MolagentFiles/ \
@@ -105,7 +105,7 @@ To predict a subset of properties: add `--properties prop1 --properties prop2`.
 One invocation per model file (existing behavior):
 
 ```bash
-uv run $PLUGIN_ROOT/skills/predict/scripts/predict.py \
+uv run $MOLAGENT_PLUGIN_ROOT/skills/predict/scripts/predict.py \
     --model-file {model_file_path} \
     {--smiles-file INPUT_CSV | --smiles-list "SMILES1" --smiles-list "SMILES2"} \
     --output-folder MolagentFiles/ \
@@ -144,7 +144,7 @@ For API serving, see the model card for deployment instructions.
 
 ## Important Notes
 
-- `$PLUGIN_ROOT` is the plugin root directory, persisted to `.claude/settings.local.json` by the SessionStart hook. Available in all Bash calls. Takes effect after first session restart following install.
+- `$MOLAGENT_PLUGIN_ROOT` is the plugin root directory, persisted to `.claude/settings.local.json` by the SessionStart hook. Available in all Bash calls. Takes effect after first session restart following install.
 - Python scripts: `uv run ...` (no venv activation needed — `uv run` handles dependencies)
 - The predict script auto-detects SMILES columns — don't force the training column name on new data
 - Blender properties are auto-detected from `train_info.json` if not explicitly provided

@@ -25,7 +25,7 @@ Check `pipeline_state.json`:
 For each property, refit its model:
 
 ```bash
-uv run $PLUGIN_ROOT/skills/train-pipeline/scripts/refit_model.py \
+uv run $MOLAGENT_PLUGIN_ROOT/skills/train-pipeline/scripts/refit_model.py \
     --model-file {outputs.model_files[property]} \
     --csv-file {outputs.split_csv} \
     --output-folder {config.output_folder} \
@@ -46,7 +46,7 @@ Check for refitted model file:
 If multiple properties were refitted, merge the refitted per-property `.pt` files:
 
 ```bash
-uv run $PLUGIN_ROOT/skills/train-pipeline/scripts/merge_models.py \
+uv run $MOLAGENT_PLUGIN_ROOT/skills/train-pipeline/scripts/merge_models.py \
     --model-files {config.output_folder}/{prop1}_refitted_stackingregmodel.pt \
     --model-files {config.output_folder}/{prop2}_refitted_stackingregmodel.pt \
     --output-file {config.output_folder}/merged_refitted_stackingregmodel.pt \
@@ -89,7 +89,7 @@ Step 7 complete: Model refitted for deployment
 - Model files are per-property dicts: `outputs.model_files.prop1`
 - Paths: use `Path(dir) / filename` (NEVER f-string concatenation)
 - Read/update/write `pipeline_state.json` in the run folder
-- Scripts: `uv run $PLUGIN_ROOT/...` (always set via .claude/settings.local.json)
+- Scripts: `uv run $MOLAGENT_PLUGIN_ROOT/...` (always set via .claude/settings.local.json)
 
 ## Error Handling
 

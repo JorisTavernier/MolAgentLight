@@ -8,7 +8,7 @@ hooks:
     - hooks:
         - type: command
           command: >-
-            uv run $PLUGIN_ROOT/skills/train-pipeline/validators/validate_pipeline_state.py
+            uv run $MOLAGENT_PLUGIN_ROOT/skills/train-pipeline/validators/validate_pipeline_state.py
             --directory MolagentFiles
 ---
 
@@ -52,7 +52,7 @@ Goal: analyze dataset, auto-configure sensible defaults, present "thinking" reas
 Run the detection script:
 
 ```bash
-uv run $PLUGIN_ROOT/skills/train-pipeline/scripts/detect_dataset.py \
+uv run $MOLAGENT_PLUGIN_ROOT/skills/train-pipeline/scripts/detect_dataset.py \
     --csv-file {user_data_file}
 ```
 
@@ -248,8 +248,8 @@ Instructions:
 {step_content}
 
 Critical Rules:
-- Scripts: uv run $PLUGIN_ROOT/skills/train-pipeline/scripts/script.py
-  (PLUGIN_ROOT is always set via .claude/settings.local.json — if missing, restart Claude Code)
+- Scripts: uv run $MOLAGENT_PLUGIN_ROOT/skills/train-pipeline/scripts/script.py
+  (MOLAGENT_PLUGIN_ROOT is always set via .claude/settings.local.json — if missing, restart Claude Code)
 - State key: 'outputs' (NOT 'files')
 - Paths: Path(dir) / filename (NEVER f-string concat)
 - Read/update/write pipeline_state.json in the run folder
@@ -333,7 +333,7 @@ AskUserQuestion:
 
 ## Important Notes
 
-- `$PLUGIN_ROOT` is the plugin root directory, persisted to `.claude/settings.local.json` by the SessionStart hook. Available in all Bash calls including subagents. Takes effect after first session restart following install.
+- `$MOLAGENT_PLUGIN_ROOT` is the plugin root directory, persisted to `.claude/settings.local.json` by the SessionStart hook. Available in all Bash calls including subagents. Takes effect after first session restart following install.
 - All scripts: `uv run script.py` — with the venv activated (SessionStart hook), uv uses it automatically. Do not use `uv run python`.
 - State persists in `{run_folder}/pipeline_state.json` — each run is isolated
 - The registry at `MolagentFiles/model_registry.json` is global (indexes all runs)

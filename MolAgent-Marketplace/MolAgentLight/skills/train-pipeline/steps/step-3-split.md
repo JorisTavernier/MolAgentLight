@@ -22,7 +22,7 @@ Read from state:
 - `config.output_folder`: run folder path
 
 ```bash
-uv run $PLUGIN_ROOT/skills/train-pipeline/scripts/split_data.py \
+uv run $MOLAGENT_PLUGIN_ROOT/skills/train-pipeline/scripts/split_data.py \
     --csv-file {outputs.prepared_csv} \
     --properties {prop1} --properties {prop2} \
     --split-strategy {split_strategy} \
@@ -72,7 +72,7 @@ Read the split info JSON to get counts per split.
 - Read prepared_csv from `outputs.prepared_csv` (NOT `files.prepared_csv`)
 - Paths: use `Path(dir) / filename` (NEVER f-string concatenation)
 - Read/update/write `pipeline_state.json` in the run folder
-- Scripts: `uv run $PLUGIN_ROOT/...` (always set via .claude/settings.local.json)
+- Scripts: `uv run $MOLAGENT_PLUGIN_ROOT/...` (always set via .claude/settings.local.json)
 
 ## Error Handling
 

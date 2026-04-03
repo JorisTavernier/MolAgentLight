@@ -1,6 +1,6 @@
 #!/bin/bash
 # SessionStart hook for AutoMol plugin
-# Provides: AUTOMOL_ROOT (repo root), PLUGIN_ROOT (plugin root with skills/)
+# Provides: AUTOMOL_ROOT (repo root), MOLAGENT_PLUGIN_ROOT (plugin root with skills/)
 #
 # Works in BOTH modes:
 #   - Plugin mode: /plugin install automol (uses CLAUDE_PLUGIN_ROOT)
@@ -10,17 +10,17 @@
 if [ -n "$CLAUDE_PROJECT_DIR" ]; then AUTOMOL_ROOT="$CLAUDE_PROJECT_DIR"; else AUTOMOL_ROOT="$PWD"; fi
 
 if [ -n "$CLAUDE_PLUGIN_ROOT" ]; then
-  PLUGIN_ROOT="$CLAUDE_PLUGIN_ROOT"
+  MOLAGENT_PLUGIN_ROOT="$CLAUDE_PLUGIN_ROOT"
 elif [ -d "$AUTOMOL_ROOT/MolAgent-Marketplace/MolAgentLight/skills" ]; then
-  PLUGIN_ROOT="$AUTOMOL_ROOT/MolAgent-Marketplace/MolAgentLight"
+  MOLAGENT_PLUGIN_ROOT="$AUTOMOL_ROOT/MolAgent-Marketplace/MolAgentLight"
 else
-  PLUGIN_ROOT="$AUTOMOL_ROOT"
+  MOLAGENT_PLUGIN_ROOT="$AUTOMOL_ROOT"
 fi
 
 # 2. Write to CLAUDE_ENV_FILE if set (existing behavior)
 if [ -n "$CLAUDE_ENV_FILE" ]; then
   echo "export AUTOMOL_ROOT=\"$AUTOMOL_ROOT\"" >> "$CLAUDE_ENV_FILE"
-  echo "export PLUGIN_ROOT=\"$PLUGIN_ROOT\"" >> "$CLAUDE_ENV_FILE"
+  echo "export MOLAGENT_PLUGIN_ROOT=\"$MOLAGENT_PLUGIN_ROOT\"" >> "$CLAUDE_ENV_FILE"
 fi
 
 # 3. Venv setup + AutoMol install
@@ -56,9 +56,9 @@ if ! uv pip install "$AUTOMOL_LIB"; then
   exit 1
 fi
 
-# 4. Persist to settings.local.json so PLUGIN_ROOT is available in all Bash calls (including subagents)
+# 4. Persist to settings.local.json so MOLAGENT_PLUGIN_ROOT is available in all Bash calls (including subagents)
 _SETTINGS_FILE="$AUTOMOL_ROOT/.claude/settings.local.json" \
-_PLUGIN_ROOT="$PLUGIN_ROOT" \
+_MOLAGENT_PLUGIN_ROOT="$MOLAGENT_PLUGIN_ROOT" \
 _AUTOMOL_ROOT="$AUTOMOL_ROOT" \
 python -c "
 import json, sys, os
@@ -67,10 +67,10 @@ try:
     with open(sf) as f: s = json.load(f)
 except (FileNotFoundError, json.JSONDecodeError): s = {}
 s.setdefault('env', {})
-s['env']['PLUGIN_ROOT'] = os.environ['_PLUGIN_ROOT']
+s['env']['MOLAGENT_PLUGIN_ROOT'] = os.environ['_MOLAGENT_PLUGIN_ROOT']
 s['env']['AUTOMOL_ROOT'] = os.environ['_AUTOMOL_ROOT']
 with open(sf, 'w') as f: json.dump(s, f, indent=2)
-print('PLUGIN_ROOT persisted to settings.local.json (takes effect on next session start)', file=sys.stderr)
+print('MOLAGENT_PLUGIN_ROOT persisted to settings.local.json (takes effect on next session start)', file=sys.stderr)
 " 2>&1 || echo "WARNING: Could not update settings.local.json" >&2
 
 exit 0

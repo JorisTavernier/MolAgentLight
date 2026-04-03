@@ -135,11 +135,11 @@ export UV_NATIVE_TLS=true
 The SessionStart hook exports two variables via `.claude/settings.local.json`:
 
 - **`AUTOMOL_ROOT`** — Repository root. Falls back from `CLAUDE_PROJECT_DIR` to `PWD`.
-- **`PLUGIN_ROOT`** — Plugin root where `skills/` lives. Falls back from `CLAUDE_PLUGIN_ROOT` to `$AUTOMOL_ROOT/MolAgent-Marketplace/plugins/MolAgentLight`.
+- **`MOLAGENT_PLUGIN_ROOT`** — Plugin root where `skills/` lives. Falls back from `CLAUDE_PLUGIN_ROOT` to `$AUTOMOL_ROOT/MolAgent-Marketplace/plugins/MolAgentLight`.
 
 On first install, the hook writes these to `.claude/settings.local.json`. **Restart Claude Code once** after installing — on next start, both vars are injected into every Bash tool call, including subagents.
 
-Skill files use `$PLUGIN_ROOT/skills/...` for all script paths.
+Skill files use `$MOLAGENT_PLUGIN_ROOT/skills/...` for all script paths.
 
 ## Configuration
 

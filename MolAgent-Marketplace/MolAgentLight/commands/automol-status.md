@@ -10,7 +10,7 @@ Run the following checks and report the results:
 
 ```bash
 echo "AUTOMOL_ROOT: ${AUTOMOL_ROOT:-not set}"
-echo "PLUGIN_ROOT: ${PLUGIN_ROOT:-not set (restart Claude Code to apply)}"
+echo "MOLAGENT_PLUGIN_ROOT: ${MOLAGENT_PLUGIN_ROOT:-not set (restart Claude Code to apply)}"
 echo "AUTOMOL_VENV: ${AUTOMOL_VENV:-.venv}"
 echo "Python: $(python --version 2>&1)"
 echo "uv: $(uv --version 2>&1)"
@@ -47,7 +47,7 @@ fi
 
 ### 5. Settings
 
-Check that PLUGIN_ROOT is persisted for subagents:
+Check that MOLAGENT_PLUGIN_ROOT is persisted for subagents:
 
 ```bash
 echo "=== Settings ==="
@@ -57,7 +57,7 @@ sf = os.path.join(os.getcwd(), '.claude', 'settings.local.json')
 try:
     s = json.load(open(sf))
     env = s.get('env', {})
-    print('PLUGIN_ROOT in settings.local.json:', env.get('PLUGIN_ROOT', 'NOT SET'))
+    print('MOLAGENT_PLUGIN_ROOT in settings.local.json:', env.get('MOLAGENT_PLUGIN_ROOT', 'NOT SET'))
     print('AUTOMOL_ROOT in settings.local.json:', env.get('AUTOMOL_ROOT', 'NOT SET'))
 except: print('settings.local.json not found or invalid')
 " 2>&1; then :; fi

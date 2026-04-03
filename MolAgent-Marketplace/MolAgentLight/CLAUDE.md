@@ -10,7 +10,7 @@ This is a Claude Code plugin for the AutoMol molecular ML library. It has 3 skil
 - `skills/predict/scripts/` — Prediction script, invoked the same way.
 - `skills/visualize/scripts/` — Dashboard generation script (PEP 723, self-contained dependencies).
 - `MolagentFiles/` — All pipeline outputs. Only `model_registry.json` is version-controlled.
-- `hooks/setup-automol-env.sh` — Exports `AUTOMOL_ROOT` (repo root) and `PLUGIN_ROOT` (plugin root) at session start.
+- `hooks/setup-automol-env.sh` — Exports `AUTOMOL_ROOT` (repo root) and `MOLAGENT_PLUGIN_ROOT` (plugin root) at session start.
 
 ### Execution Pattern
 
@@ -144,7 +144,7 @@ When training multiple properties, per-property `.pt` files each contain the ful
 | Variable | Source | Purpose |
 |----------|--------|---------|
 | `AUTOMOL_ROOT` | SessionStart hook | Repository root directory |
-| `PLUGIN_ROOT` | SessionStart hook → settings.local.json | Plugin root directory (where skills/ lives). Written to `.claude/settings.local.json` on first run; takes effect on next session start. Available in all Bash tool calls and subagents. |
+| `MOLAGENT_PLUGIN_ROOT` | SessionStart hook → settings.local.json | Plugin root directory (where skills/ lives). Written to `.claude/settings.local.json` on first run; takes effect on next session start. Available in all Bash tool calls and subagents. |
 | `AUTOMOL_VENV` | User env | Virtual environment name (default: `.venv`) |
 | `CLAUDE_PLUGIN_ROOT` | Claude Code | Set when loaded as plugin |
 

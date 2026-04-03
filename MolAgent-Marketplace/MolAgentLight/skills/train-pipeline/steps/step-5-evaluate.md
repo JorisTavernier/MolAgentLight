@@ -32,7 +32,7 @@ Check `pipeline_state.json`:
 For each property, evaluate its model:
 
 ```bash
-uv run $PLUGIN_ROOT/skills/train-pipeline/scripts/evaluate_{task_type}_model.py \
+uv run $MOLAGENT_PLUGIN_ROOT/skills/train-pipeline/scripts/evaluate_{task_type}_model.py \
     --model-file {outputs.model_files[property]} \
     --test-file {outputs.split_csv} \
     --output-folder {config.output_folder} \
@@ -103,7 +103,7 @@ Step 5 complete: Model evaluated
 - **`outputs.evaluation_results` must be a flat dict** `{ "prop": "path/to/predictions.csv" }` — this is what the `visualize` skill reads. Do NOT nest it with info paths.
 - Paths: use `Path(dir) / filename` (NEVER f-string concatenation)
 - Read/update/write `pipeline_state.json` in the run folder
-- Scripts: `uv run $PLUGIN_ROOT/...` (always set via .claude/settings.local.json)
+- Scripts: `uv run $MOLAGENT_PLUGIN_ROOT/...` (always set via .claude/settings.local.json)
 
 ## Error Handling
 

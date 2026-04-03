@@ -107,7 +107,7 @@ def main(pipeline_state):
     split_strategy = config.get("split_strategy", "mixed")
 
     # Plugin root (for path construction in usage examples)
-    plugin_root = "${PLUGIN_ROOT}"
+    plugin_root = "${MOLAGENT_PLUGIN_ROOT}"
 
     # Precompute artifact strings for table
     train_info_dict = outputs.get('train_info', {})

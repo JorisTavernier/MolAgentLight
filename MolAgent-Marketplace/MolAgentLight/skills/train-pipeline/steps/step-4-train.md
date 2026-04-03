@@ -28,7 +28,7 @@ Train the ensemble model using the configured settings. This step can take minut
 ## Command Construction - Standard
 
 ```bash
-uv run $PLUGIN_ROOT/skills/train-pipeline/scripts/train_{task_type}.py \
+uv run $MOLAGENT_PLUGIN_ROOT/skills/train-pipeline/scripts/train_{task_type}.py \
     --csv-file {outputs.split_csv} \
     --feature-keys {feature_key1} \
     --feature-keys {feature_key2} \
@@ -40,7 +40,7 @@ uv run $PLUGIN_ROOT/skills/train-pipeline/scripts/train_{task_type}.py \
 ## Command Construction - Advanced
 
 ```bash
-uv run $PLUGIN_ROOT/skills/train-pipeline/scripts/train_{task_type}_advanced.py \
+uv run $MOLAGENT_PLUGIN_ROOT/skills/train-pipeline/scripts/train_{task_type}_advanced.py \
     --csv-file {outputs.split_csv} \
     --properties {prop1} --properties {prop2} \
     --feature-keys {feature_key1} \
@@ -65,7 +65,7 @@ For each target property, check:
 If multiple properties were trained, merge per-property `.pt` files into a single file to eliminate encoder duplication:
 
 ```bash
-uv run $PLUGIN_ROOT/skills/train-pipeline/scripts/merge_models.py \
+uv run $MOLAGENT_PLUGIN_ROOT/skills/train-pipeline/scripts/merge_models.py \
     --model-files {config.output_folder}/{prop1}_stackingregmodel.pt \
     --model-files {config.output_folder}/{prop2}_stackingregmodel.pt \
     --output-file {config.output_folder}/merged_stackingregmodel.pt \
@@ -124,7 +124,7 @@ Step 4 complete: Model trained
 - Read split_csv from `outputs.split_csv` (NOT `files.split_csv`)
 - Paths: use `Path(dir) / filename` (NEVER f-string concatenation)
 - Read/update/write `pipeline_state.json` in the run folder
-- Scripts: `uv run $PLUGIN_ROOT/...` (always set via .claude/settings.local.json)
+- Scripts: `uv run $MOLAGENT_PLUGIN_ROOT/...` (always set via .claude/settings.local.json)
 
 ## Error Handling
 

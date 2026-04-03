@@ -26,7 +26,7 @@ Read config values:
 ### Regression
 
 ```bash
-uv run $PLUGIN_ROOT/skills/train-pipeline/scripts/prepare_for_regression.py \
+uv run $MOLAGENT_PLUGIN_ROOT/skills/train-pipeline/scripts/prepare_for_regression.py \
     --csv-file {data_file} \
     --smiles-column {smiles_column} \
     --properties {prop1} --properties {prop2} \
@@ -45,7 +45,7 @@ For more data preparation options add `--help` to see all command-line options.
 ### Classification
 
 ```bash
-uv run $PLUGIN_ROOT/skills/train-pipeline/scripts/prepare_for_classification.py \
+uv run $MOLAGENT_PLUGIN_ROOT/skills/train-pipeline/scripts/prepare_for_classification.py \
     --csv-file {data_file} \
     --smiles-column {smiles_column} \
     --properties {prop1} --properties {prop2} \
@@ -95,7 +95,7 @@ Step 2 complete: Data prepared
 - State key is `"outputs"` (NOT `"files"`)
 - Paths: use `Path(dir) / filename` (NEVER f-string concatenation)
 - Read/update/write `pipeline_state.json` in the run folder (`config.output_folder`)
-- Scripts: `uv run $PLUGIN_ROOT/...` (always set via .claude/settings.local.json)
+- Scripts: `uv run $MOLAGENT_PLUGIN_ROOT/...` (always set via .claude/settings.local.json)
 
 ## Error Handling
 
