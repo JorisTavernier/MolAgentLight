@@ -118,3 +118,27 @@ Training scripts accept `--computational-load` with 4 levels:
 | `cheap` | Light — inner methods, basic search |
 | `moderate` | Medium — stacking, randomized search |
 | `expensive` | Full — stacking of stacking, hyperopt |
+
+## Environment Variables (top-level summary)
+
+| Variable | Purpose |
+|----------|---------|
+| `MOLAGENT_PLUGIN_ROOT` | Plugin root (set by SessionStart hook from `CLAUDE_PLUGIN_ROOT`). |
+| `MOLAGENT_OUTPUT_ROOT` | Where pipeline output and the registry live (default: `./MolagentFiles`). |
+| `PHARMAOS_MOLAGENT_ROOT` | Nexus-injected per-project output root. Wins over `MOLAGENT_OUTPUT_ROOT`. |
+| `MOLAGENT_REGISTRY_PATH` | Override the registry JSON path. Default: `${MOLAGENT_OUTPUT_ROOT}/model_registry.json`. |
+| `MOLAGENT_DETERMINISTIC` | Opt-in. `true` seeds RNGs and forces serial CV. Default off. |
+| `MOLAGENT_LOG_DIR` | Stop-hook validator log directory. Default: `$TMPDIR/molagent`. |
+| `AUTOMOL_VENV` | Venv path. Default: `$AUTOMOL_ROOT/.venv`. |
+
+See `MolAgent-Marketplace/MolAgentLight/CLAUDE.md` for the full env-var contract and Nexus integration details.
+
+## Nexus Integration
+
+The plugin declares a `nexus` block in `.claude-plugin/plugin.json` exposing the `molagent_dashboard` artifact type. To install into a Nexus host (e.g., `drug_discovery_ui`):
+
+1. Copy or symlink `MolAgent-Marketplace/MolAgentLight/` into the host's `plugins/` directory.
+2. Add `'molagent_dashboard'` to the host's playground type registry (e.g., `MOLECULAR_TYPES` in `playgroundTemplates.ts` for `nexus-atrium`).
+3. Restart the host so its bundled-plugin discovery picks up the new manifest.
+
+The host injects `PHARMAOS_MOLAGENT_ROOT` per project; the SessionStart hook already honors it.

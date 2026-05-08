@@ -8,13 +8,14 @@ hooks:
     - hooks:
         - type: command
           command: >-
-            uv run $MOLAGENT_PLUGIN_ROOT/skills/train-pipeline/validators/validate_pipeline_state.py
-            --directory MolagentFiles
+            bash -c "uv run $MOLAGENT_PLUGIN_ROOT/skills/train-pipeline/validators/validate_pipeline_state.py"
 ---
 
 # AutoMol V2 — Training Pipeline
 
 Single-invocation skill: **PLAN** → **approve** → **EXECUTE** in one session.
+
+> **Output root:** every `MolagentFiles/` path below means `$MOLAGENT_OUTPUT_ROOT` (defaults to `./MolagentFiles`, overridden by `PHARMAOS_MOLAGENT_ROOT` when running inside Nexus). Use the env var when shell-expanding paths in Bash; expand it to a concrete absolute string when writing `config.output_folder` into `pipeline_state.json`.
 
 - Phase 1 analyzes the dataset, auto-fills a plan, asks the user to confirm and approve execution, creates a run folder, saves `pipeline_state.json` inside it, then proceeds directly to execution.
 - If the user declines execution ("save for later"), the plan is saved and the skill stops. Re-invoking the skill resumes from the saved state.
@@ -154,11 +155,14 @@ If the user selects "Change targets or features" or uses "Other", handle their c
 **1.4 — Create run folder:**
 
 ```
-run_id = f"{dataset_stem}-{props_joined}-{YYYYMMDD}_{HHMM}"
-run_folder = f"MolagentFiles/{run_id}/"
+run_id      = f"{dataset_stem}-{props_joined}-{YYYYMMDD}_{HHMM}"
+output_root = $MOLAGENT_OUTPUT_ROOT (or ./MolagentFiles if unset)
+run_folder  = f"{output_root}/{run_id}/"
 mkdir -p {run_folder}
-config.output_folder = run_folder
+config.output_folder = run_folder        # absolute or root-relative; not "MolagentFiles/{run_id}/" literal
 ```
+
+In Bash: `mkdir -p "${MOLAGENT_OUTPUT_ROOT:-MolagentFiles}/{run_id}"`. Resolve the env var to a real path before persisting it into the state file.
 
 **1.5 — Create execution tasks:**
 
@@ -334,10 +338,12 @@ AskUserQuestion:
 ## Important Notes
 
 - `$MOLAGENT_PLUGIN_ROOT` is the plugin root directory, persisted to `.claude/settings.local.json` by the SessionStart hook. Available in all Bash calls including subagents. Takes effect after first session restart following install.
+- `$MOLAGENT_OUTPUT_ROOT` controls where pipeline output and the registry live (defaults to `./MolagentFiles`; Nexus injects `PHARMAOS_MOLAGENT_ROOT` per project, which the hook honors).
+- `$MOLAGENT_DETERMINISTIC=true` opts in to seeded RNGs and serial CV (slower; use for reproducibility / CI). Default leaves parallelism intact.
 - All scripts: `uv run script.py` — with the venv activated (SessionStart hook), uv uses it automatically. Do not use `uv run python`.
-- State persists in `{run_folder}/pipeline_state.json` — each run is isolated
-- The registry at `MolagentFiles/model_registry.json` is global (indexes all runs)
-- Prediction is NOT part of this pipeline — use the `predict` skill after
+- State persists in `{run_folder}/pipeline_state.json` — each run is isolated.
+- The registry at `${MOLAGENT_OUTPUT_ROOT}/model_registry.json` is global (indexes all runs).
+- Prediction is NOT part of this pipeline — use the `predict` skill after.
 
 ## Additional Resources
 

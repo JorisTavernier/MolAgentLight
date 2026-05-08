@@ -1,12 +1,18 @@
 
 from pathlib import Path
 import click
+from _paths import default_output_folder, replace_csv_suffix  # noqa: E402
+from _determinism import maybe_seed_everything, force_serial_jobs  # noqa: E402
 import json
+
+# Seed RNGs at import time when MOLAGENT_DETERMINISTIC=true so any random
+# call inside Click parsing or upstream library imports is bounded.
+maybe_seed_everything()
 
 
 @click.command()
 @click.option('--csv-file', required=True, help='Path to prepared CSV file')
-@click.option('--output-folder', default='MolagentFiles/', help='Output folder')
+@click.option('--output-folder', default=default_output_folder(), help='Output folder')
 @click.option('--separator', default=',', help='CSV separator')
 @click.option('--smiles-column', default='Stand_SMILES', help='Standardized SMILES column')
 @click.option('--properties', multiple=True, required=True, help='Property column(s) to use for splitting (must exist in dataframe)')

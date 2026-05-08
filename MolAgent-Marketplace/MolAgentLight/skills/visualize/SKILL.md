@@ -12,7 +12,7 @@ Single-phase skill: discover evaluation runs, generate dashboard, open in browse
 
 ## Step 1: Discover Runs
 
-Glob for `MolagentFiles/*/pipeline_state.json`.
+Glob for `${MOLAGENT_OUTPUT_ROOT:-MolagentFiles}/*/pipeline_state.json`. (Nexus sets `PHARMAOS_MOLAGENT_ROOT` per project; the SessionStart hook normalizes it to `MOLAGENT_OUTPUT_ROOT`.)
 
 For each file found, read it and check:
 - `steps_completed` includes step 5 (evaluate)
@@ -102,6 +102,7 @@ The dashboard includes:
 ## Important Notes
 
 - `$MOLAGENT_PLUGIN_ROOT` is the plugin root directory, set by the SessionStart hook and persisted to `settings.local.json`.
-- Python scripts: `uv run ...` (dependencies resolved via PEP 723 inline metadata)
-- The dashboard is a self-contained HTML file — no server needed, works offline after first load (Plotly.js CDN)
-- Only runs with completed evaluation (step 5) are eligible
+- Python scripts: `uv run ...` (dependencies resolved via PEP 723 inline metadata).
+- The dashboard is a self-contained HTML file — no server needed, works offline after first load (Plotly.js CDN).
+- Only runs with completed evaluation (step 5) are eligible.
+- The dashboard ALSO ships as a Nexus playground (`molagent_dashboard` artifact type) — same template at `playgrounds/dashboard_playground.html` in the plugin root. When loaded inside an iframe it emits `artifact:height` (resize) and `artifact:prompt_draft` (when the user clicks "Ask Claude about these outliers").

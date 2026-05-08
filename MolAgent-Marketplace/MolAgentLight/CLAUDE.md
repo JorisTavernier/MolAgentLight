@@ -141,10 +141,36 @@ When training multiple properties, per-property `.pt` files each contain the ful
 
 ## Environment Variables
 
+The plugin honors a layered env-var contract — Nexus values take precedence over user values, which take precedence over defaults.
+
 | Variable | Source | Purpose |
 |----------|--------|---------|
-| `AUTOMOL_ROOT` | SessionStart hook | Repository root directory |
-| `MOLAGENT_PLUGIN_ROOT` | SessionStart hook → settings.local.json | Plugin root directory (where skills/ lives). Written to `.claude/settings.local.json` on first run; takes effect on next session start. Available in all Bash tool calls and subagents. |
-| `AUTOMOL_VENV` | User env | Virtual environment name (default: `.venv`) |
-| `CLAUDE_PLUGIN_ROOT` | Claude Code | Set when loaded as plugin |
+| `CLAUDE_PLUGIN_ROOT` | Claude Code | Set when loaded as a plugin. The hook reads this. |
+| `AUTOMOL_ROOT` | SessionStart hook | Project / repo root (`CLAUDE_PROJECT_DIR` or `$PWD`). |
+| `MOLAGENT_PLUGIN_ROOT` | SessionStart hook → `.claude/settings.local.json` | Plugin root directory (where `skills/` lives). Available in all Bash calls and subagents. Takes effect on next session start. |
+| `MOLAGENT_OUTPUT_ROOT` | SessionStart hook → `.claude/settings.local.json` | Where pipeline output and the model registry live. Default: `$AUTOMOL_ROOT/MolagentFiles`. Override-aware: if `PHARMAOS_MOLAGENT_ROOT` is set (Nexus), that wins. |
+| `PHARMAOS_MOLAGENT_ROOT` | Nexus host (per-project) | Nexus injects this so each project gets its own output namespace. Honored automatically by the hook. |
+| `MOLAGENT_REGISTRY_PATH` | User | Full path override for `model_registry.json`. Defaults to `${MOLAGENT_OUTPUT_ROOT}/model_registry.json`. |
+| `MOLAGENT_DETERMINISTIC` | User | Opt-in. When `true` (also `1/yes/on`): seeds `random` / `numpy` / `torch`, sets `PYTHONHASHSEED`, forces all `n_jobs` to 1. Reproducible but slower (no parallel CV). Default off. |
+| `MOLAGENT_LOG_DIR` | User | Where the Stop-hook validator log goes (default: `$TMPDIR/molagent`). The legacy plugin-cache path is read-only when installed via `/plugin install`. |
+| `AUTOMOL_VENV` | User | Virtual environment path (default: `$AUTOMOL_ROOT/.venv`). Set this to a stable path to avoid per-project re-installs in Nexus. |
+
+**Output-root resolution priority** (used by every Python script):
+
+```
+1. PHARMAOS_MOLAGENT_ROOT (Nexus)
+2. MOLAGENT_OUTPUT_ROOT (user / hook-defaulted)
+3. ./MolagentFiles
+```
+
+All this is encapsulated in `skills/train-pipeline/scripts/_paths.py::get_output_root()`. The `_determinism.py` sibling provides `maybe_seed_everything()` and `force_serial_jobs()`.
+
+## Nexus Integration
+
+The `nexus` block in `.claude-plugin/plugin.json` declares one artifact type — `molagent_dashboard` — pointing at the playground template at `playgrounds/dashboard_playground.html`. That is the SAME file that the `visualize` skill substitutes into `dashboard.html` via `generate_dashboard.py`. One template, two delivery paths:
+
+- **Standalone**: `generate_dashboard.py` substitutes `{{INITIAL_DATA}}` with the pre-computed JSON blob, writes `{run_folder}/dashboard.html`.
+- **Nexus iframe**: the Nexus host loads the template into an iframe `srcdoc` and substitutes `{{INITIAL_DATA}}`, `{{ARTIFACT_TITLE}}`, `{{ARTIFACT_ID}}`, `{{RUN_ID}}` from the artifact body.
+
+The playground emits `artifact:height` (iframe sizing) and `artifact:prompt_draft` (when the user clicks "Ask Claude about these outliers"); both are no-ops when running standalone. Theming follows the Atelier (warm paper, amber `#d4a056`) / Jarvis (dark cyan `#38bdf8`) Nexus token system; `prefers-color-scheme` auto-switches and a manual toggle persists to `localStorage`.
 

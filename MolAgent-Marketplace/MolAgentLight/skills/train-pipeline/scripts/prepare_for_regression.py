@@ -1,6 +1,8 @@
 
 from pathlib import Path
 import click
+from _paths import default_output_folder, replace_csv_suffix  # noqa: E402
+from _determinism import maybe_seed_everything, force_serial_jobs  # noqa: E402
 import json
 
 
@@ -63,7 +65,7 @@ def load_3d_data_from_sdf(sdf_file, property_key='pChEMBL',pdb_key:str='pdb'):
               help='Property key in SDF file to extract (for 3D features)')
 @click.option('--pdb-key', default='pdb',
               help='pdb key in SDF file to extract (for 3D features)')
-@click.option('--output-folder', default='MolagentFiles/',
+@click.option('--output-folder', default=default_output_folder(),
               help='The folder to save files to')
 @click.option('--separator', default=',',
               help='The separator of the csv file')

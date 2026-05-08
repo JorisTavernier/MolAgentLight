@@ -1,6 +1,8 @@
 
 from pathlib import Path
 import click
+from _paths import default_output_folder, replace_csv_suffix  # noqa: E402
+from _determinism import maybe_seed_everything, force_serial_jobs  # noqa: E402
 import json
 
 
@@ -65,7 +67,7 @@ def setup_3d_feature_generators(feature_generators, sdf_file, protein_folder,
 
 @click.command()
 @click.option('--csv-file', required=True, help='Path to split CSV file (output from skill 02-data-split)')
-@click.option('--output-folder', default='MolagentFiles/', help='Output folder for model and results')
+@click.option('--output-folder', default=default_output_folder(), help='Output folder for model and results')
 @click.option('--separator', default=',', help='CSV separator')
 @click.option('--smiles-column', default=None, help='SMILES column (auto-detected from JSON info)')
 @click.option('--properties', multiple=True, default=None, help='Properties to model (auto-detected from JSON info)')
@@ -139,6 +141,7 @@ def main(**kwargs):
         uv run python train_classification.py --csv-file MolagentFiles/automol_split_Caco2_wang.csv \\
             --model-config single_method --base-list lr SVC --scorer balanced_accuracy
     """
+    maybe_seed_everything()
     import numpy as np
     import pandas as pd
 
@@ -191,7 +194,7 @@ def main(**kwargs):
         file_stem = Path(file_stem).stem
 
     # The split info JSON is always saved alongside the split CSV with _info.json suffix
-    split_info_path = csv_file.replace('.csv', '_info.json')
+    split_info_path = replace_csv_suffix(csv_file, '_info.json')
     if not Path(split_info_path).exists():
         raise ValueError(f'Cannot find split info JSON file at {split_info_path}')
 
@@ -203,11 +206,11 @@ def main(**kwargs):
     if not prep_input:
         raise ValueError('Split info JSON missing input_file field')
 
-    prep_info_path = str(Path(output_folder) / prep_input.replace(".csv", "_info.json"))
+    prep_info_path = str(Path(output_folder) / replace_csv_suffix(prep_input, '_info.json'))
     if not Path(prep_info_path).exists():
         # Try in the same folder as the split file
         prep_basename = prep_input.split('/')[-1] if '/' in prep_input else prep_input
-        prep_info_path = str(Path(output_folder) / prep_basename.replace('.csv', '_info.json'))
+        prep_info_path = str(Path(output_folder) / replace_csv_suffix(prep_basename, '_info.json'))
 
     if not Path(prep_info_path).exists():
         raise ValueError(f'Cannot find prep info JSON file at {prep_info_path}')
@@ -336,6 +339,9 @@ def main(**kwargs):
         'inner_jobs': kwargs.get('n_jobs_inner') if kwargs.get('n_jobs_inner') is not None else defaults['inner'],
         'method_jobs': kwargs.get('n_jobs_method') if kwargs.get('n_jobs_method') is not None else defaults['method'],
     }
+
+
+    n_jobs_dict = force_serial_jobs(n_jobs_dict)
 
     # Setup search options
     search_type = kwargs.get('search_type', None)

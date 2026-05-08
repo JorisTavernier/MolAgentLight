@@ -12,7 +12,7 @@ Single-phase skill: load registry, select model, run predictions, show results.
 
 ## Step 1: Load Registry
 
-Read `MolagentFiles/model_registry.json`.
+Read `${MOLAGENT_OUTPUT_ROOT:-MolagentFiles}/model_registry.json`. (When running inside Nexus, `$PHARMAOS_MOLAGENT_ROOT` overrides `$MOLAGENT_OUTPUT_ROOT` automatically via the SessionStart hook.)
 
 - If the file does not exist or is empty → tell the user: "No trained models found. Use the `train-pipeline` skill to train a model first." **STOP.**
 
@@ -94,7 +94,7 @@ Single invocation predicts all properties at once:
 uv run $MOLAGENT_PLUGIN_ROOT/skills/predict/scripts/predict.py \
     --model-file {model_file} \
     {--smiles-file INPUT_CSV | --smiles-list "SMILES1" --smiles-list "SMILES2"} \
-    --output-folder MolagentFiles/ \
+    --output-folder "${MOLAGENT_OUTPUT_ROOT:-MolagentFiles}/" \
     --verbose
 ```
 
@@ -108,7 +108,7 @@ One invocation per model file (existing behavior):
 uv run $MOLAGENT_PLUGIN_ROOT/skills/predict/scripts/predict.py \
     --model-file {model_file_path} \
     {--smiles-file INPUT_CSV | --smiles-list "SMILES1" --smiles-list "SMILES2"} \
-    --output-folder MolagentFiles/ \
+    --output-folder "${MOLAGENT_OUTPUT_ROOT:-MolagentFiles}/" \
     --verbose
 ```
 
