@@ -25,7 +25,7 @@ If the user also has 3D data (SDF file), add `--sdf-file {sdf_file}`.
 
 The script outputs JSON with these fields:
 - `smiles_column`: Detected SMILES column name (or null)
-- `overall_task_type`: "regression", "classification", "regression_classification", or "unknown"
+- `overall_task_type`: "regression", "classification", "regression_classification" (all targets binary 0/1, modeled with regression estimators), or "unknown"
 - `targets`: Array of numeric columns with task type, unique values, and stats
 - `blender_properties`: Array of candidate blender columns with confidence/reasons (checked across ALL targets, deduplicated)
 - `recommended_features`: Recommended feature keys for this dataset size

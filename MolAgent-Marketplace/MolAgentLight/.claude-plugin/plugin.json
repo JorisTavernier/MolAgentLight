@@ -1,10 +1,11 @@
 {
   "name": "MolAgentLight",
-  "version": "1.0.0",
-  "description": "Claude Code plugin for AutoMol drug discovery pipeline - train molecular property prediction models from SMILES data using ensemble stacking methods",
-  "author":
-  	{"name": "AutoMol Team"},
+  "version": "1.1.0",
+  "description": "Claude Code plugin for AutoMol drug discovery pipeline - train molecular property prediction models from SMILES data using ensemble stacking methods, with an interactive Plotly dashboard playground.",
+  "author": { "name": "AutoMol Team" },
   "repository": "https://github.com/JorisTavernier/MolAgentLight",
+  "categories": ["drug-discovery", "scientific-computing", "machine-learning"],
+  "tags": ["smiles", "qsar", "stacking", "molecular-features", "plotly", "evaluation", "metrics", "cheminformatics"],
   "hooks": {
     "SessionStart": [
       {
@@ -17,6 +18,58 @@
       }
     ]
   },
-  "skills": ["./skills/train-pipeline", "./skills/predict", "./skills/visualize"],
-  "commands": ["./commands/automol-status.md"]
+  "skills": [
+    "./skills/train-pipeline",
+    "./skills/predict",
+    "./skills/visualize"
+  ],
+  "mcpServers": {
+    "automol-mcp": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--active",
+        "--no-sync",
+        "${CLAUDE_PLUGIN_ROOT}/mcp/server.py"
+      ],
+      "env": {
+        "MOLAGENT_PLUGIN_ROOT": "${CLAUDE_PLUGIN_ROOT}",
+        "PYTHONPATH": "${CLAUDE_PLUGIN_ROOT}/mcp",
+        "VIRTUAL_ENV": "${CLAUDE_PLUGIN_ROOT}/.venv"
+      }
+    }
+  },
+  "commands": ["./commands/automol-status.md"],
+
+  "nexus": {
+    "capability_summary": "End-to-end molecular property ML pipeline: detect → train → evaluate → refit a stacking ensemble from SMILES data, then visualize results as an interactive Plotly dashboard playground (training provenance, residuals, ROC, PR, calibration, hit-enrichment, multi-property correlation, downloadable outliers).",
+    "prompt_snippet": "./CLAUDE.md",
+    "artifact_types": [
+      {
+        "type": "molagent_dashboard",
+        "template": "./playgrounds/dashboard_playground.html"
+      }
+    ],
+    "team_recipe": {
+      "default_name": "MolAgent ML",
+      "color": "#d4a056",
+      "model": "sonnet"
+    },
+    "env_contract": {
+      "required": [],
+      "honored": [
+        "PHARMAOS_MOLAGENT_ROOT",
+        "MOLAGENT_OUTPUT_ROOT",
+        "MOLAGENT_REGISTRY_PATH",
+        "MOLAGENT_DETERMINISTIC",
+        "MOLAGENT_LOG_DIR",
+        "AUTOMOL_VENV"
+      ],
+      "exported_by_session_hook": [
+        "AUTOMOL_ROOT",
+        "MOLAGENT_PLUGIN_ROOT",
+        "MOLAGENT_OUTPUT_ROOT"
+      ]
+    }
+  }
 }

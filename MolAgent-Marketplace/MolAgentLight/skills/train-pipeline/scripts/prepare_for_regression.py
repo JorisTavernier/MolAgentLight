@@ -1,6 +1,8 @@
 
 from pathlib import Path
 import click
+from _paths import default_output_folder, replace_csv_suffix  # noqa: E402
+from _determinism import maybe_seed_everything, force_serial_jobs  # noqa: E402
 import json
 
 
@@ -63,7 +65,7 @@ def load_3d_data_from_sdf(sdf_file, property_key='pChEMBL',pdb_key:str='pdb'):
               help='Property key in SDF file to extract (for 3D features)')
 @click.option('--pdb-key', default='pdb',
               help='pdb key in SDF file to extract (for 3D features)')
-@click.option('--output-folder', default='MolagentFiles/',
+@click.option('--output-folder', default=default_output_folder(),
               help='The folder to save files to')
 @click.option('--separator', default=',',
               help='The separator of the csv file')
@@ -145,7 +147,7 @@ def main(**kwargs):
     percentages=kwargs.get('use_percentages',False)
     use_logit=kwargs.get('use_logit',False)
 
-    df.dropna(inplace=True,how='all', subset = properties)
+    df.dropna(inplace=True, how='any', subset=properties)
     df = df.reset_index(drop=True)
 
     # Check for negative or zero values before applying log10 transformation
@@ -180,18 +182,22 @@ def main(**kwargs):
         print(f'Blender properties specified: {blender_properties}')
     # Validate blender properties exist and are numeric (with warning only)
     if blender_properties:
+        valid_blenders = []
         for bp in blender_properties:
             if bp not in df.columns:
                 print(f'Warning: Blender property "{bp}" not found in CSV columns. Available columns: {list(df.columns)}')
             else:
-                # Check if numeric (with warning)
+                valid_blenders.append(bp)
                 if not pd.api.types.is_numeric_dtype(df[bp]):
                     print(f'Warning: Blender property "{bp}" is not numeric (dtype: {df[bp].dtype}). This may cause issues during training.')
-                else:
-                    # Check for missing values
-                    if df[bp].isna().any():
-                        na_count = df[bp].isna().sum()
-                        print(f'Warning: Blender property "{bp}" has {na_count} missing values.')
+        # Drop rows with NaN in blender properties (estimators cannot handle them)
+        if valid_blenders:
+            before = len(df)
+            df.dropna(inplace=True, how='any', subset=valid_blenders)
+            df = df.reset_index(drop=True)
+            dropped = before - len(df)
+            if dropped > 0 and verbose:
+                print(f'Dropped {dropped} rows with missing blender property values ({len(df)} remaining)')
 
     # Create output directory if needed
     Path(out_dir).mkdir(parents=True, exist_ok=True)

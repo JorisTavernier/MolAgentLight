@@ -33,10 +33,10 @@ if __name__ == "__main__":
     """
      example:
      python -m automol.convert_old_models \
-     --input_file automol/trained_models_old/JNJ_ENUM_SMILES_STEREO_ENCODER.pt \
-     --output_file automol/trained_models/JNJ_ENUM_SMILES_STEREO_ENCODER.pt
+     --input_file automol/trained_models_old/OLD_ENCODER.pt \
+     --output_file automol/trained_models/NEW_ENCODER.pt
     """
-    parser = ArgumentParser("Convert files created with old (non-packaged) transformers code such that they are compatible with new jnj_auto_ml package")
+    parser = ArgumentParser("Convert files created with old (non-packaged) transformers code such that they are compatible with new automol package")
     parser.add_argument("--input_file", dest="input_file", help="original pt file")
     parser.add_argument("--output_file", dest="output_file", help="converted pt file")
 

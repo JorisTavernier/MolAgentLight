@@ -1,58 +1,46 @@
 ---
 name: visualize
 description: Generate an interactive HTML dashboard from AutoMol evaluation results. Auto-discovers completed runs with evaluation data and renders Plotly.js charts. Use when the user wants to visualize training results.
-allowed-tools: Read, Glob, Grep, Bash, AskUserQuestion
+allowed-tools: Read, Glob, Bash, AskUserQuestion,
+  mcp__plugin_MolAgentLight_automol-mcp__list_models
 ---
 
 # AutoMol — Visualize
 
-Single-phase skill: discover evaluation runs, generate dashboard, open in browser.
+View or regenerate interactive dashboards from completed training runs.
+
+> **Note:** The `train_and_visualize` MCP tool already generates a dashboard as part of training. This skill is for finding and opening existing dashboards, or regenerating them from evaluation data.
 
 ---
 
-## Step 1: Discover Runs
+## Workflow
 
-Glob for `MolagentFiles/*/pipeline_state.json`.
+### Step 1: Find Existing Dashboards
 
-For each file found, read it and check:
-- `steps_completed` includes step 5 (evaluate)
-- `outputs.evaluation_results` exists and is non-empty
+Glob for `${MOLAGENT_OUTPUT_ROOT:-MolagentFiles}/*/dashboard.html`.
 
-Build a list of qualifying runs with: `run_id`, `config.task_type`, `config.target_properties`, `metrics`, `last_updated`.
+- **0 found**: check if evaluation data exists (glob for `*/pipeline_state.json`). If yes → offer to regenerate (Step 3). If no → tell user to train first. STOP.
+- **1 found**: auto-select.
+- **N found**: present choices via AskUserQuestion (most recent first, show run_id and properties).
 
-**0 runs**: Tell the user: "No completed evaluation runs found. Use the `train-pipeline` skill to train and evaluate a model first." **STOP.**
+### Step 2: Open Dashboard
 
----
+Open the HTML file in the default browser:
 
-## Step 2: Select Run
-
-**1 run**: Auto-select it. Display a brief summary:
-
-```
-Run: {run_id}
-  Task: {task_type}
-  Properties: {target_properties}
-  Metrics: {formatted_metrics}
+```bash
+# Windows
+start "" "{dashboard_path}"
+# macOS
+open "{dashboard_path}"
+# Linux
+xdg-open "{dashboard_path}"
 ```
 
-**N runs**: Present choices via AskUserQuestion:
+Report the path and what's included (interactive charts, metrics, property selector, outlier detection).
 
-```
-AskUserQuestion:
-  question: "Which run do you want to visualize?"
-  header: "Run"
-  options: (up to 4 runs, most recent first)
-    - "{run_id} — {target_properties} ({task_type}, {key_metric})"
-    - ...
-```
+### Step 3: Regenerate (fallback)
 
-After selection, display the run summary as above.
-
----
-
-## Step 3: Generate Dashboard
-
-Run the generation script:
+If no dashboard exists but a `pipeline_state.json` with completed evaluation (step 5) is available:
 
 ```bash
 uv run $MOLAGENT_PLUGIN_ROOT/skills/visualize/scripts/generate_dashboard.py \
@@ -61,47 +49,12 @@ uv run $MOLAGENT_PLUGIN_ROOT/skills/visualize/scripts/generate_dashboard.py \
     --verbose
 ```
 
-Where:
-- `{pipeline_state_path}` is the full path to the selected `pipeline_state.json`
-- `{run_folder}` is the parent directory of the pipeline state file
+Then open the generated file (Step 2).
 
 ---
 
-## Step 4: Open Dashboard
+## Notes
 
-Open the generated HTML in the default browser (detect platform):
-
-```bash
-# macOS
-open {run_folder}/dashboard.html
-# Linux
-xdg-open {run_folder}/dashboard.html
-# Windows
-start {run_folder}/dashboard.html
-```
-
-Report the result:
-
-```
-Dashboard generated and opened!
-
-  Run: {run_id}
-  Output: {run_folder}/dashboard.html
-  Properties: {target_properties}
-
-The dashboard includes:
-  - Interactive Plotly.js charts (scatter, residuals, error distribution, etc.)
-  - Metrics summary panel
-  - Property selector (for multi-property runs)
-  - Overview and detailed view presets
-  - Copy-able findings summary
-```
-
----
-
-## Important Notes
-
-- `$MOLAGENT_PLUGIN_ROOT` is the plugin root directory, set by the SessionStart hook and persisted to `settings.local.json`.
-- Python scripts: `uv run ...` (dependencies resolved via PEP 723 inline metadata)
-- The dashboard is a self-contained HTML file — no server needed, works offline after first load (Plotly.js CDN)
-- Only runs with completed evaluation (step 5) are eligible
+- Dashboards are self-contained HTML files — no server needed, works offline after CDN load.
+- Only runs with completed evaluation (step 5) can generate dashboards.
+- The dashboard also ships as a Nexus playground artifact (`molagent_dashboard` type).

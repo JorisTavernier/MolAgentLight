@@ -3,49 +3,78 @@
 # requires-python = ">=3.10"
 # dependencies = []
 # ///
-"""
-Stop hook validator for the training pipeline skill.
+"""Stop hook validator for the training pipeline skill.
 
 Validates that pipeline_state.json exists and contains required fields.
 Prevents the LLM from stopping before it has actually written a valid plan.
 
-Design: This hook fires on EVERY Stop event (both after Phase 1 and Phase 2).
-- After Phase 1 (PLAN): Enforces that the plan file was actually written.
-  current_step >= 2 means plan is complete. This is the primary guard.
-- After Phase 2 (EXECUTE): File already exists with current_step >= 2,
-  so the hook passes trivially. Execution completion is enforced by the
-  task list, not by this hook. This allows the user to abort mid-execution.
+Behavior:
+  - After Phase 1 (PLAN): enforces that plan file was written. current_step >= 2
+    means plan is complete. This is the primary guard.
+  - After Phase 2 (EXECUTE): file already exists with current_step >= 2,
+    so the hook passes trivially. Execution completion is enforced by the task
+    list, not by this hook. This allows the user to abort mid-execution.
 
-v2.0: Now scans MolagentFiles/*/pipeline_state.json (run folders) when
-the direct MolagentFiles/pipeline_state.json path doesn't exist.
+Output root resolution:
+  --directory CLI flag > MOLAGENT_OUTPUT_ROOT > PHARMAOS_MOLAGENT_ROOT > MolagentFiles
+
+Log file lives in tempdir (writable in plugin-cache deployments) — the legacy
+``SCRIPT_DIR`` location was read-only when installed via /plugin install.
 
 Hook type: Stop
 Exit codes:
   0: Validation passed (pipeline_state.json is valid)
   1: Validation failed (missing file or required fields)
-
-Usage:
-  uv run validate_pipeline_state.py --directory MolagentFiles
 """
+
+from __future__ import annotations
 
 import argparse
 import json
 import logging
+import os
 import sys
+import tempfile
 from pathlib import Path
 
-SCRIPT_DIR = Path(__file__).parent
-LOG_FILE = SCRIPT_DIR / "validate_pipeline_state.log"
+LOG_DIR_ENV = "MOLAGENT_LOG_DIR"
+
+
+def _resolve_log_path() -> Path:
+    """Pick a writable log location.
+
+    Priority: ``MOLAGENT_LOG_DIR`` env > system tempdir.
+    Plugin-cache directories are often read-only so the legacy
+    ``SCRIPT_DIR / "validate_pipeline_state.log"`` is unsafe.
+    """
+    explicit = os.environ.get(LOG_DIR_ENV)
+    if explicit:
+        log_dir = Path(explicit)
+    else:
+        log_dir = Path(tempfile.gettempdir()) / "molagent"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return log_dir / "validate_pipeline_state.log"
+
+
+def _resolve_default_directory() -> str:
+    """Default --directory honors env-var output-root resolution."""
+    return (
+        os.environ.get("PHARMAOS_MOLAGENT_ROOT")
+        or os.environ.get("MOLAGENT_OUTPUT_ROOT")
+        or "MolagentFiles"
+    )
+
+
+LOG_FILE = _resolve_log_path()
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
-    handlers=[logging.FileHandler(LOG_FILE, mode='a')]
+    handlers=[logging.FileHandler(LOG_FILE, mode="a")],
 )
 logger = logging.getLogger(__name__)
 
-DEFAULT_DIRECTORY = "MolagentFiles"
 STATE_FILENAME = "pipeline_state.json"
 
 REQUIRED_TOP_KEYS = [
@@ -84,36 +113,37 @@ MISSING_KEYS_ERROR = (
 
 
 def find_state_files(directory: str) -> list[Path]:
-    """Find all pipeline_state.json files in run folders."""
+    """Find all pipeline_state.json files in run folders, sorted by mtime."""
     base = Path(directory)
 
-    # Check direct path first (backward compatibility)
     direct = base / STATE_FILENAME
     if direct.exists():
         return [direct]
 
-    # Scan run folders: MolagentFiles/*/pipeline_state.json
-    state_files = sorted(base.glob(f"*/{STATE_FILENAME}"))
-    return state_files
+    if not base.exists():
+        return []
+
+    # Sort by modification time so the *most recently updated* run is checked
+    # last (newest sort order), which is what the user just touched. Falling
+    # back to lexicographic ordering when mtimes match.
+    files = list(base.glob(f"*/{STATE_FILENAME}"))
+    files.sort(key=lambda p: (p.stat().st_mtime, str(p)))
+    return files
 
 
 def validate_state(state_path: Path) -> tuple[bool, str]:
     """Validate a single pipeline_state.json file."""
-    # Check valid JSON
     try:
         with open(state_path) as f:
             state = json.load(f)
     except (json.JSONDecodeError, OSError):
-        msg = INVALID_JSON_ERROR.format(path=state_path)
-        return False, msg
+        return False, INVALID_JSON_ERROR.format(path=state_path)
 
-    # Check required top-level keys
     missing = []
     for key in REQUIRED_TOP_KEYS:
         if key not in state:
             missing.append(key)
 
-    # Check required config keys (only if config exists)
     config = state.get("config", {})
     if isinstance(config, dict):
         for key in REQUIRED_CONFIG_KEYS:
@@ -122,12 +152,10 @@ def validate_state(state_path: Path) -> tuple[bool, str]:
 
     if missing:
         missing_list = "\n".join(f"  - {m}" for m in missing)
-        msg = MISSING_KEYS_ERROR.format(
+        return False, MISSING_KEYS_ERROR.format(
             path=state_path, count=len(missing), missing_list=missing_list
         )
-        return False, msg
 
-    # Check current_step is at least 2 (plan phase complete)
     current_step = state.get("current_step", 0)
     if current_step < 2:
         msg = (
@@ -137,26 +165,15 @@ def validate_state(state_path: Path) -> tuple[bool, str]:
         )
         return False, msg
 
-    msg = f"Pipeline state valid: {state_path} (step {current_step})"
-    return True, msg
+    return True, f"Pipeline state valid: {state_path} (step {current_step})"
 
 
 def validate(directory: str) -> tuple[bool, str]:
-    """Validate pipeline_state.json exists and has required fields.
-
-    Scans both the direct path and run folder subdirectories.
-    """
     state_files = find_state_files(directory)
-
-    # No state files found anywhere
     if not state_files:
-        msg = NO_FILE_ERROR.format(directory=directory)
-        return False, msg
-
-    # Validate the most recent state file (last in sorted order = newest run folder)
-    # If direct path exists, it was returned first and is the only entry
-    state_path = state_files[-1]
-    return validate_state(state_path)
+        return False, NO_FILE_ERROR.format(directory=directory)
+    # Validate the most-recently-modified state file
+    return validate_state(state_files[-1])
 
 
 def main():
@@ -165,10 +182,9 @@ def main():
 
     try:
         parser = argparse.ArgumentParser()
-        parser.add_argument('-d', '--directory', default=DEFAULT_DIRECTORY)
+        parser.add_argument("-d", "--directory", default=_resolve_default_directory())
         args = parser.parse_args()
 
-        # Read hook input from stdin
         try:
             json.load(sys.stdin)
         except (json.JSONDecodeError, EOFError):
@@ -187,10 +203,14 @@ def main():
 
     except Exception as e:
         logger.exception(f"Validation error: {e}")
-        print(json.dumps({
-            "result": "continue",
-            "message": f"Validation error (allowing through): {str(e)}"
-        }))
+        print(
+            json.dumps(
+                {
+                    "result": "continue",
+                    "message": f"Validation error (allowing through): {str(e)}",
+                }
+            )
+        )
         sys.exit(0)
 
 

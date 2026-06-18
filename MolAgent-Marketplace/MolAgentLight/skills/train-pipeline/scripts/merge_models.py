@@ -20,6 +20,8 @@ import sys
 from pathlib import Path
 
 import click
+from _paths import default_output_folder, replace_csv_suffix  # noqa: E402
+from _determinism import maybe_seed_everything, force_serial_jobs  # noqa: E402
 
 
 def infer_property_name(model_path):
@@ -158,6 +160,10 @@ def main(**kwargs):
     base_model = models[0]
     base_prop = properties[0]
 
+    # Prevent merge_model() from regenerating reproducible output mid-loop
+    # (fails when blender properties require external data not available from SMILES)
+    base_model.reproducable_output = None
+
     # Keep only the base property in the base model
     props_to_remove = [p for p in list(base_model.models.keys()) if p != base_prop]
     if props_to_remove:
@@ -198,7 +204,11 @@ def main(**kwargs):
     base_model.deep_clean()
 
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
-    save_model(base_model, output_file)
+    has_blender = any(
+        base_model.tasksfeatures_parameters.get(p, {}).get('blender_properties')
+        for p in base_model.models
+    )
+    save_model(base_model, output_file, create_reproducability_output=not has_blender)
 
     if verbose:
         size_mb = Path(output_file).stat().st_size / (1024 * 1024)

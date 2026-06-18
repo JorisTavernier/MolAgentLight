@@ -1,6 +1,8 @@
 
 from pathlib import Path
 import click
+from _paths import default_output_folder, labelnames_from_json, replace_csv_suffix  # noqa: E402
+from _determinism import maybe_seed_everything, force_serial_jobs  # noqa: E402
 import json
 import shutil
 import importlib.util
@@ -68,7 +70,7 @@ def setup_3d_feature_generators(feature_generators, sdf_file, protein_folder,
 
 @click.command()
 @click.option('--csv-file', required=True, help='Path to split CSV file (output from skill 02-data-split)')
-@click.option('--output-folder', default='MolagentFiles/', help='Output folder for model and results')
+@click.option('--output-folder', default=default_output_folder(), help='Output folder for model and results')
 @click.option('--separator', default=',', help='CSV separator')
 @click.option('--smiles-column', default=None, help='SMILES column (auto-detected from JSON info)')
 @click.option('--properties', multiple=True, default=None, help='Properties to model (auto-detected from JSON info)')
@@ -183,6 +185,7 @@ def main(**kwargs):
             --refit-include-test \\
             --verbose
     """
+    maybe_seed_everything()
     import numpy as np
     import pandas as pd
     
@@ -315,7 +318,7 @@ def main(**kwargs):
         file_stem = Path(file_stem).stem
 
     # The split info JSON is always saved alongside the split CSV with _info.json suffix
-    split_info_path = csv_file.replace('.csv', '_info.json')
+    split_info_path = replace_csv_suffix(csv_file, '_info.json')
     if not Path(split_info_path).exists():
         raise ValueError(f'Cannot find split info JSON file at {split_info_path}')
 
@@ -327,12 +330,12 @@ def main(**kwargs):
     if not prep_input:
         raise ValueError('Split info JSON missing input_file field')
 
-    prep_info_path = f'{output_folder}{prep_input.replace(".csv", "_info.json")}'
+    prep_info_path = str(Path(output_folder) / replace_csv_suffix(prep_input, '_info.json'))
     if not Path(prep_info_path).exists():
         if '/' in prep_input:
-            prep_info_path = f"{output_folder}{prep_input.split('/')[-1].replace('.csv', '_info.json')}"
+            prep_info_path = str(Path(output_folder) / replace_csv_suffix(Path(prep_input).name, '_info.json'))
         else:
-            prep_info_path = f"{output_folder}{prep_input.replace('.csv', '_info.json')}"
+            prep_info_path = str(Path(output_folder) / replace_csv_suffix(prep_input, '_info.json'))
 
     if not Path(prep_info_path).exists():
         raise ValueError(f'Cannot find prep info JSON file at {prep_info_path}')
@@ -355,7 +358,9 @@ def main(**kwargs):
 
     # Get labelnames from prep info for classification
     labelnames = prep_info.get('labelnames', None)
-    if labelnames is None:
+    if labelnames is not None:
+        labelnames = labelnames_from_json(labelnames)
+    else:
         labelnames = {}
         for prop in properties:
             if prop in train_df.columns:
@@ -404,6 +409,9 @@ def main(**kwargs):
         'inner_jobs': kwargs.get('n_jobs_inner') if kwargs.get('n_jobs_inner') is not None else defaults['inner'],
         'method_jobs': kwargs.get('n_jobs_method') if kwargs.get('n_jobs_method') is not None else defaults['method'],
     }
+
+
+    n_jobs_dict = force_serial_jobs(n_jobs_dict)
 
 
     # Setup search options
@@ -720,14 +728,14 @@ def main(**kwargs):
         stacked_model.compute_SD = True
 
         # Model file path
-        model_file = f'{output_folder}{prop}_stackingclfmodel.pt'
+        model_file = str(Path(output_folder) / f'{prop}_stackingclfmodel.pt')
 
         # Save model
         create_reproducability_output = not bool(has_3d_features)
         save_model(stacked_model, model_file,create_reproducability_output=create_reproducability_output)
 
         # Save results
-        results_file = f'{output_folder}{prop}_results.json'
+        results_file = str(Path(output_folder) / f'{prop}_results.json')
         save_result_dictionary_to_json(
             result_dict=results_dictionary,
             json_file=results_file
@@ -779,7 +787,7 @@ def main(**kwargs):
                 'property_key': prep_info.get('property_key', 'pChEMBL')
             }
 
-        train_info_path = f'{output_folder}{prop}_train_info.json'
+        train_info_path = str(Path(output_folder) / f'{prop}_train_info.json')
         with open(train_info_path, 'w') as f:
             json.dump(train_info, f, indent=2)
 
@@ -795,7 +803,7 @@ def main(**kwargs):
             print(f'\n===== Running Evaluation =====')
 
         for prop in properties:
-            model_file = f'{output_folder}{prop}_stackingclfmodel.pt'
+            model_file = str(Path(output_folder) / f'{prop}_stackingclfmodel.pt')
 
             if not Path(model_file).exists():
                 print(f'Skipping evaluation for {prop}: model file not found')
@@ -836,7 +844,7 @@ def main(**kwargs):
                         true_values=eval_split_df[prop].tolist(),
                         predictions=predictions[prop]['mean'].tolist()
                     )
-                    report_path = f'{output_folder}{prop}_evaluation_report.pdf'
+                    report_path = str(Path(output_folder) / f'{prop}_evaluation_report.pdf')
                     title = eval_title or f'{prop} Model Evaluation ({eval_split_type} split)'
                     generate_report(
                         figures=figures,
@@ -857,7 +865,7 @@ def main(**kwargs):
                 'True': eval_split_df[prop].tolist(),
                 'Predicted': predictions[prop]['mean'].tolist()
             })
-            predictions_csv = f'{output_folder}{prop}_evaluation_predictions.csv'
+            predictions_csv = str(Path(output_folder) / f'{prop}_evaluation_predictions.csv')
             predictions_df.to_csv(predictions_csv, index=False)
             if verbose:
                 print(f'  Saved predictions: {predictions_csv}')
@@ -871,7 +879,7 @@ def main(**kwargs):
                 'timestamp': pd.Timestamp.now().isoformat(),
                 'predictions_file': predictions_csv
             }
-            eval_info_path = f'{output_folder}{prop}_evaluation_info.json'
+            eval_info_path = str(Path(output_folder) / f'{prop}_evaluation_info.json')
             with open(eval_info_path, 'w') as f:
                 json.dump(eval_info, f, indent=2)
 
@@ -881,7 +889,7 @@ def main(**kwargs):
             print(f'\n===== Running Refit =====')
 
         for prop in properties:
-            model_file = f'{output_folder}{prop}_stackingclfmodel.pt'
+            model_file = str(Path(output_folder) / f'{prop}_stackingclfmodel.pt')
 
             if not Path(model_file).exists():
                 print(f'Skipping refit for {prop}: model file not found')
@@ -910,7 +918,7 @@ def main(**kwargs):
                 print(f'  Combined samples: {len(combined_train)}')
 
             # Get prefix_dict from train_info
-            with open(f'{output_folder}{prop}_train_info.json') as f:
+            with open(str(Path(output_folder) / f'{prop}_train_info.json')) as f:
                 train_info = json.load(f)
             prefix_dict = train_info.get('prefix_dict', {
                 'method_prefix': 'clf',
@@ -933,7 +941,7 @@ def main(**kwargs):
             # Save refitted model
             model.deep_clean()
             model.compute_SD = True
-            refit_model_file = f'{output_folder}{prop}_refitted_stackingclfmodel.pt'
+            refit_model_file = str(Path(output_folder) / f'{prop}_refitted_stackingclfmodel.pt')
             save_model(model, refit_model_file)
 
             # Save refit info
@@ -945,7 +953,7 @@ def main(**kwargs):
                 'include_test_set': refit_include_test,
                 'timestamp': pd.Timestamp.now().isoformat()
             }
-            refit_info_path = f'{output_folder}{prop}_refit_info.json'
+            refit_info_path = str(Path(output_folder) / f'{prop}_refit_info.json')
             with open(refit_info_path, 'w') as f:
                 json.dump(refit_info, f, indent=2)
 

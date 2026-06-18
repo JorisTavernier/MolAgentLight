@@ -1,12 +1,14 @@
 from pathlib import Path
 import click
+from _paths import default_output_folder, replace_csv_suffix  # noqa: E402
+from _determinism import maybe_seed_everything, force_serial_jobs  # noqa: E402
 import json
 
 
 @click.command()
 @click.option('--model-file', required=True, help='Path to trained .pt model file')
 @click.option('--csv-file', required=True, help='Path to split CSV file (output from skill 02-data-split)')
-@click.option('--output-folder', default='MolagentFiles/', help='Output folder for refitted model')
+@click.option('--output-folder', default=default_output_folder(), help='Output folder for refitted model')
 @click.option('--separator', default=',', help='CSV separator')
 @click.option('--smiles-column', default=None, help='SMILES column (auto-detected from train info)')
 @click.option('--properties', multiple=True, default=None, help='Properties to refit (auto-detected from train info)')
@@ -31,6 +33,7 @@ def main(**kwargs):
         uv run python refit_model.py --model-file MolagentFiles/Y_stackingregmodel.pt \\
             --csv-file MolagentFiles/automol_split_Caco2_wang.csv --include-test-set
     """
+    maybe_seed_everything()
     import pandas as pd
     from automol.stacking import load_model, save_model
 

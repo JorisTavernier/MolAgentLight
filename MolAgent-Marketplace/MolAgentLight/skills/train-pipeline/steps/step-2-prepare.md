@@ -54,9 +54,25 @@ uv run $MOLAGENT_PLUGIN_ROOT/skills/train-pipeline/scripts/prepare_for_classific
     --verbose
 ```
 
-### Regression + Classification (mixed targets)
+### RegressionClassification (binary targets modeled with regression)
 
-Run `prepare_for_regression.py` for regression targets and `prepare_for_classification.py` for classification targets separately is NOT supported. Use `prepare_for_regression.py` and handle classification targets downstream, OR choose the dominant task type.
+Use `prepare_for_classification.py` with `--categorical` — targets are already binary 0/1:
+
+```bash
+uv run $MOLAGENT_PLUGIN_ROOT/skills/train-pipeline/scripts/prepare_for_classification.py \
+    --csv-file {data_file} \
+    --smiles-column {smiles_column} \
+    --properties {prop1} --properties {prop2} \
+    --output-folder {config.output_folder} \
+    --categorical \
+    --verbose
+```
+
+Note: log10/logit transforms do NOT apply (targets are binary). The training step uses regression estimators on the 0/1 values, clipping predictions to [0,1] as probability estimates.
+
+### Mixed target types
+
+If detection reports mixed regression + classification targets, the pipeline defaults to the dominant task type. Training separate models for each type is recommended — running `prepare_for_regression.py` and `prepare_for_classification.py` separately for different targets in the same run is NOT supported.
 
 ## Verify Outputs
 

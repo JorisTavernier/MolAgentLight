@@ -15,6 +15,8 @@ from difflib import SequenceMatcher
 from pathlib import Path
 
 import click
+from _paths import default_output_folder, replace_csv_suffix  # noqa: E402
+from _determinism import maybe_seed_everything, force_serial_jobs  # noqa: E402
 import pandas as pd
 from scipy import stats
 
@@ -23,6 +25,7 @@ def detect_smiles_column(df):
     """
     Detect which column contains SMILES strings.
     Priority: 'smiles' > 'canonical_smiles' > 'molecule' > 'compound' > 'drug'
+    Columns with 'id' in the name are deprioritized (e.g. 'Drug' preferred over 'Drug_ID').
     """
     smiles_keywords_priority = [
         'smiles', 'canonical_smiles',
@@ -30,14 +33,21 @@ def detect_smiles_column(df):
         'drug',
     ]
 
-    # First pass: look for exact "smiles" in column name
+    # First pass: look for "smiles" in column name, deprioritize "id" variants
+    id_fallback = None
     for col in df.columns:
         col_lower = col.lower()
         if 'smiles' in col_lower:
-            return col
+            if 'id' in col_lower:
+                id_fallback = id_fallback or col
+            else:
+                return col
+    if id_fallback:
+        return id_fallback
 
-    # Second pass: look for other priority keywords
+    # Second pass: look for other priority keywords, deprioritize "id" variants
     for keyword in smiles_keywords_priority[2:]:
+        id_fallback = None
         for col in df.columns:
             col_lower = col.lower()
             if keyword in col_lower:
@@ -46,7 +56,12 @@ def detect_smiles_column(df):
                     continue
                 first_val = str(sample.iloc[0]) if len(sample) > 0 else ""
                 if any(c in first_val for c in ['C', 'N', 'O', 'S', '[', ']', '(', ')', '=', '#']):
-                    return col
+                    if 'id' in col_lower:
+                        id_fallback = id_fallback or col
+                    else:
+                        return col
+        if id_fallback:
+            return id_fallback
 
     # Fallback: check if any column contains SMILES-like strings
     for col in df.columns:
@@ -142,12 +157,8 @@ def recommend_features(df, has_3d_data=False):
 
     if has_3d_data:
         return ["Bottleneck", "rdkit", "prolif", "AffGraph"]
-    elif n_samples < 1500:
-        return ["Bottleneck"]
-    elif n_samples < 5000:
-        return ["Bottleneck", "rdkit"]
     else:
-        return ["Bottleneck", "rdkit", "fps_2048_2"]
+        return ["Bottleneck"]
 
 
 def detect_all_targets(df, smiles_column):
@@ -174,6 +185,8 @@ def detect_all_targets(df, smiles_column):
             if task_type == "regression":
                 data = df[col].dropna()
                 if len(data) > 0:
+                    import numpy as np
+
                     # Basic stats
                     target_info["mean"] = round(float(data.mean()), 4)
                     target_info["std"] = round(float(data.std()), 4)
@@ -196,6 +209,30 @@ def detect_all_targets(df, smiles_column):
                         "suggest_log_transform": suggest_log,
                         "all_positive": all_positive,
                     })
+
+                    # Histogram for threshold selection UI
+                    hist_counts, hist_edges = np.histogram(data.values, bins=30)
+                    target_info["histogram"] = {
+                        "counts": hist_counts.tolist(),
+                        "edges": [round(float(e), 4) for e in hist_edges.tolist()],
+                    }
+
+            if task_type == "classification":
+                data = df[col].dropna()
+                unique_vals = sorted(data.unique().tolist())
+                n_classes = len(unique_vals)
+                # Categorical if all values are small non-negative integers
+                is_categorical = all(
+                    isinstance(v, (int, float)) and float(v) == int(v) and v >= 0
+                    for v in unique_vals
+                )
+                counts = data.value_counts(dropna=True)
+                target_info.update({
+                    "suggested_nb_classes": n_classes,
+                    "suggested_categorical": is_categorical,
+                    "class_values_detected": unique_vals,
+                    "class_distribution": {str(k): int(v) for k, v in counts.items()},
+                })
 
             targets.append(target_info)
     return targets
@@ -251,18 +288,25 @@ def compute_null_rates(df, targets):
 
 
 def count_valid_smiles(df, smiles_column):
-    """Basic SMILES validity: non-null, contains atom chars, has structure chars."""
+    """SMILES validity check. Uses RDKit MolFromSmiles when available, falls back to pattern matching."""
     if smiles_column is None or smiles_column not in df.columns:
         return (0, len(df))
     total = len(df)
     series = df[smiles_column].dropna()
-    atom_chars = set("CNOSPFIBcnospfi")
-    struct_chars = set("()[]=#@/\\")
-    valid = 0
-    for val in series:
-        s = str(val)
-        if any(c in atom_chars for c in s) and any(c in struct_chars for c in s):
-            valid += 1
+
+    try:
+        from rdkit import Chem
+        from rdkit import RDLogger
+        RDLogger.DisableLog('rdApp.*')
+        valid = sum(1 for s in series if Chem.MolFromSmiles(str(s)) is not None)
+    except ImportError:
+        atom_chars = set("CNOSPFIBcnospfi")
+        struct_chars = set("()[]=#@/\\")
+        valid = sum(
+            1 for val in series
+            if any(c in atom_chars for c in str(val))
+            and any(c in struct_chars for c in str(val))
+        )
     return (valid, total)
 
 
@@ -272,19 +316,7 @@ def count_valid_smiles(df, smiles_column):
 
 def recommend_computational_load(n_samples, n_targets, has_3d, task_type):
     """Recommend computational load based on dataset characteristics."""
-    if n_samples < 100:
-        return "free", "Very small dataset — fast single-model signal check recommended"
-    if n_samples < 500:
-        return "cheap", "Small dataset — extensive search won't improve results"
-    if has_3d and n_samples >= 1000:
-        return "expensive", "Large 3D dataset benefits from full search"
-    if has_3d:
-        return "moderate", "3D features add compute cost"
-    if n_targets > 5 and n_samples >= 2000:
-        return "expensive", "Multi-target large dataset"
-    if n_samples >= 2000:
-        return "moderate", "Large dataset — expensive available for max performance"
-    return "moderate", "Good balance of speed and model quality"
+    return "cheap", "Good balance of speed and model quality, the user can specify otherwise if they see signal using the cheap setting"
 
 
 def recommend_split_strategy(n_samples, targets, class_balance):
@@ -328,9 +360,39 @@ def recommend_target_transformations(targets):
     return recommendations
 
 
-def generate_warnings(n_samples, targets, null_rates, correlations, class_balance):
+def generate_warnings(n_samples, targets, null_rates, correlations, class_balance,
+                      smiles_validity_rate=None):
     """Generate data-driven warnings for the user."""
     warnings = []
+
+    # Warn about mixed target types
+    task_types = set(t["task_type"] for t in targets)
+    if len(task_types) > 1:
+        reg_cols = [t["column"] for t in targets if t["task_type"] == "regression"]
+        clf_cols = [t["column"] for t in targets if t["task_type"] == "classification"]
+        warnings.append(
+            f"Mixed target types detected: {', '.join(reg_cols)} (regression) "
+            f"and {', '.join(clf_cols)} (classification). "
+            f"Consider training separate models or selecting only one target type."
+        )
+
+    if smiles_validity_rate is not None and smiles_validity_rate < 90:
+        if smiles_validity_rate < 50:
+            warnings.append(
+                f"SMILES validity very low ({smiles_validity_rate}%) — "
+                f"check that the correct SMILES column is selected"
+            )
+        elif smiles_validity_rate < 70:
+            warnings.append(
+                f"SMILES validity low ({smiles_validity_rate}%) — "
+                f"many invalid molecules will be dropped during preparation"
+            )
+        else:
+            warnings.append(
+                f"SMILES validity {smiles_validity_rate}% — "
+                f"some molecules will be dropped during preparation"
+            )
+
     if n_samples < 50:
         warnings.append(f"Very small dataset ({n_samples} samples) — results may be unreliable")
     elif n_samples < 100:
@@ -394,11 +456,29 @@ def main(csv_file, sdf_file):
     all_targets = detect_all_targets(df, smiles_column) if smiles_column else []
 
     # Determine overall task type from targets
+    # "regression_classification" means ALL targets are binary (0/1) and will be
+    # modeled with regression estimators (predictions clipped to [0,1] as probabilities).
+    # It does NOT mean "some targets are regression, some are classification."
     task_types = set(t["task_type"] for t in all_targets)
     if len(task_types) == 1:
-        overall_task_type = task_types.pop()
-    elif task_types == {"regression", "classification"}:
-        overall_task_type = "regression_classification"
+        tt = task_types.pop()
+        # If all targets are classification AND all are binary with values in {0,1},
+        # suggest regression_classification as an alternative approach.
+        if tt == "classification":
+            all_binary_01 = all(
+                set(t.get("class_values_detected", [])) <= {0, 1, 0.0, 1.0}
+                and t.get("suggested_nb_classes", 0) == 2
+                for t in all_targets
+            )
+            overall_task_type = "regression_classification" if all_binary_01 else "classification"
+        else:
+            overall_task_type = tt
+    elif len(task_types) > 1:
+        # Mixed target types — pick the dominant one (majority wins)
+        type_counts = {}
+        for t in all_targets:
+            type_counts[t["task_type"]] = type_counts.get(t["task_type"], 0) + 1
+        overall_task_type = max(type_counts, key=type_counts.get)
     elif all_targets:
         overall_task_type = all_targets[0]["task_type"]
     else:
@@ -433,9 +513,12 @@ def main(csv_file, sdf_file):
     null_rates = compute_null_rates(df, all_targets)
     valid_smiles, total_smiles = count_valid_smiles(df, smiles_column)
 
+    smiles_validity_rate = round(valid_smiles / total_smiles * 100, 1) if total_smiles > 0 else 0.0
+
     characteristics = {
         "valid_smiles": valid_smiles,
         "total_smiles": total_smiles,
+        "smiles_validity_rate": smiles_validity_rate,
         "class_balance": class_balance,
         "high_correlations": high_correlations,
         "null_rates": null_rates,
@@ -447,7 +530,8 @@ def main(csv_file, sdf_file):
     split_value, split_reason = recommend_split_strategy(n_samples, all_targets, class_balance)
     adv_value, adv_reason = recommend_use_advanced(n_targets, overall_task_type, class_balance)
     target_transforms = recommend_target_transformations(all_targets)
-    warnings = generate_warnings(n_samples, all_targets, null_rates, high_correlations, class_balance)
+    warnings = generate_warnings(n_samples, all_targets, null_rates, high_correlations, class_balance,
+                                  smiles_validity_rate=smiles_validity_rate)
 
     recommendations = {
         "computational_load": {"value": load_value, "reason": load_reason},

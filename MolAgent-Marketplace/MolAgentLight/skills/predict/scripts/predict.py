@@ -34,6 +34,8 @@ def infer_property_from_filename(model_file):
               help='Blender property columns to use from input CSV (auto-detected from train info)')
 @click.option('--blender-values', multiple=True, default=None,
               help='Blender property values for CLI SMILES (format: property=value, e.g., Y_noisy=1.5)')
+@click.option('--convert-log10/--no-convert-log10', default=None,
+              help='Override log10 back-conversion. Default: auto-detected from train info.')
 @click.option('--verbose/--no-verbose', default=False, help='Verbose output')
 def main(**kwargs):
     """Make predictions on new molecules using a trained AutoMol model.
@@ -256,14 +258,21 @@ def main(**kwargs):
             print(f'Model SMILES column: {model_smiles_col}')
 
     # Read train info to get blender properties metadata
-    # For merged models, try the first property's train info
+    # Look in the model's directory first (run folder), then output folder
     first_prop = properties_to_predict[0]
-    train_info_path = str(Path(output_folder) / f'{first_prop}_train_info.json')
-    if not Path(train_info_path).exists():
-        train_info_path = model_file.replace('.pt', '_train_info.json')
+    model_dir = Path(model_file).parent
+    train_info_path = None
+    for candidate in [
+        model_dir / f'{first_prop}_train_info.json',
+        Path(output_folder) / f'{first_prop}_train_info.json',
+        Path(model_file.replace('.pt', '_train_info.json')),
+    ]:
+        if candidate.exists():
+            train_info_path = str(candidate)
+            break
 
     train_info = {}
-    if Path(train_info_path).exists():
+    if train_info_path:
         with open(train_info_path) as f:
             train_info = json.load(f)
 
@@ -288,7 +297,16 @@ def main(**kwargs):
             if missing_props:
                 raise ValueError(f'Blender properties not found in CSV: {missing_props}. '
                                 f'Available columns: {list(input_df.columns)}')
-            # Use the first row's values for all SMILES (or match by index if rows align)
+            # Drop rows where blender properties have NaN
+            blender_nan_mask = input_df[blender_properties].isna().any(axis=1)
+            if blender_nan_mask.any():
+                dropped = int(blender_nan_mask.sum())
+                print(f'Warning: Dropped {dropped} rows with missing blender property values')
+                input_df = input_df[~blender_nan_mask].reset_index(drop=True)
+                smiles_list = input_df[smiles_column].tolist()
+                other_columns = [col for col in input_df.columns if col != smiles_column]
+            if not smiles_list:
+                raise ValueError('No valid rows remaining after removing NaN blender values')
             blender_properties_dict = {bp: input_df[bp].values for bp in blender_properties}
             if verbose:
                 print(f'Read blender properties from CSV: {list(blender_properties_dict.keys())}')
@@ -321,8 +339,12 @@ def main(**kwargs):
     if verbose:
         print(f'Generating predictions for {len(smiles_list)} SMILES...')
 
-    # Only back-transform if the model was actually trained on log10-transformed targets
-    convert_log10 = False if is_classification else train_info.get('use_log10', False)
+    # Back-transform log10 predictions unless explicitly overridden by CLI
+    cli_convert = kwargs['convert_log10']
+    if cli_convert is not None:
+        convert_log10 = cli_convert
+    else:
+        convert_log10 = False if is_classification else train_info.get('use_log10', False)
 
     predictions = stacked_model.predict(
         props=properties_to_predict,
@@ -340,8 +362,16 @@ def main(**kwargs):
 
     # Add predictions for each property
     for prop in properties_to_predict:
+        # When convert_log10 is active, strip the log10_/logit_ prefix for clean output names
+        if convert_log10 and prop.startswith('log10_'):
+            display_prop = prop[len('log10_'):]
+        elif convert_log10 and prop.startswith('logit_'):
+            display_prop = prop[len('logit_'):]
+        else:
+            display_prop = prop
+
         if is_classification:
-            class_property = f'Class_{prop}'
+            class_property = f'Class_{display_prop}'
 
             # Classification output
             if f'predicted_labels_{prop}' in predictions:
@@ -366,16 +396,19 @@ def main(**kwargs):
             for class_idx, class_name in labelnames.items():
                 proba_key = f'predicted_proba_{prop}_class_{class_name}'
                 if proba_key in predictions:
-                    col_name = f'prob_{class_name}' if not is_merged else f'prob_{prop}_{class_name}'
+                    col_name = f'prob_{class_name}' if not is_merged else f'prob_{display_prop}_{class_name}'
                     output_df[col_name] = predictions[proba_key]
         else:
-            # Regression output
-            if f'predicted_{prop}' in predictions:
-                output_df[f'predicted_{prop}'] = predictions[f'predicted_{prop}']
+            # Regression output — when convert_log10 is active, stacking.predict()
+            # creates a clean key (predicted_{stripped}) alongside the log-space key.
+            pred_key = f'predicted_{display_prop}' if display_prop != prop and f'predicted_{display_prop}' in predictions else f'predicted_{prop}'
+            if pred_key in predictions:
+                output_df[f'predicted_{display_prop}'] = predictions[pred_key]
 
             # Add uncertainty if available
-            if f'SD_{prop}' in predictions:
-                output_df[f'SD_{prop}'] = predictions[f'SD_{prop}']
+            sd_key = f'SD_{display_prop}' if display_prop != prop and f'SD_{display_prop}' in predictions else f'SD_{prop}'
+            if sd_key in predictions:
+                output_df[f'SD_{display_prop}'] = predictions[sd_key]
 
     # Add other columns from input file if available
     if other_columns and smiles_file is not None:

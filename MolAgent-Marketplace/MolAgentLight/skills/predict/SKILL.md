@@ -1,154 +1,82 @@
 ---
 name: predict
 description: Make predictions using a trained AutoMol model. Auto-discovers models from the registry. Use when the user wants to run inference on new molecules.
-allowed-tools: Read, Glob, Grep, Bash, AskUserQuestion
+allowed-tools: Read, Glob, Bash, AskUserQuestion,
+  mcp__plugin_MolAgentLight_automol-mcp__list_models,
+  mcp__plugin_MolAgentLight_automol-mcp__predict
 ---
 
 # AutoMol — Predict
 
-Single-phase skill: load registry, select model, run predictions, show results.
+Run inference on new molecules using a trained model via the `automol-mcp` MCP tools.
 
 ---
 
-## Step 1: Load Registry
+## Workflow
 
-Read `MolagentFiles/model_registry.json`.
+### Step 1: Discover Models
 
-- If the file does not exist or is empty → tell the user: "No trained models found. Use the `train-pipeline` skill to train a model first." **STOP.**
+Call `list_models()`. Present available models to the user.
 
----
+- **0 models**: tell the user to train first (via the `train-pipeline` skill). STOP.
+- **1 model**: auto-select. Show summary (id, properties, task type, metrics).
+- **N models**: present choices via AskUserQuestion (most recent first).
 
-## Step 2: Select Model
+### Step 2: Get Input
 
-**0 models**: STOP (handled above).
+If the user provided SMILES or a CSV path in their message, use it directly.
 
-**1 model**: Auto-select it. Display a brief summary:
+Otherwise ask:
+- CSV file with a SMILES column → pass as `smiles_file`
+- Individual SMILES strings → pass as `smiles_list`
 
-```
-Using model: {id}
-  Target: {target_properties}
-  Task: {task_type}
-  Metrics: {formatted_metrics or "No metrics available"}
-  Model file: {model_file}
-```
+### Step 3: Check Blender Requirements
 
-**N models**: Present choices via AskUserQuestion:
+If the selected model has `blender_properties`, warn the user that those columns must be present in their input CSV. For inline SMILES, blender values must be provided separately.
 
-```
-AskUserQuestion:
-  question: "Which model do you want to use for predictions?"
-  header: "Model"
-  options: (up to 4 models, most recent first)
-    - "{id} — {target_properties} ({task_type}, {key_metric})"
-    - ...
-```
+### Step 4: Run Prediction
 
-After selection, display the model summary as above.
+Call `predict(model_id="...", smiles_file="...")` or `predict(model_id="...", smiles_list=[...])`.
 
----
+### Step 5: Present Results
 
-## Step 3: Get Input
-
-If the user already provided input molecules (CSV path or SMILES strings) in their original message, use that directly.
-
-Otherwise, ask:
-
-```
-AskUserQuestion:
-  question: "How would you like to provide molecules for prediction?"
-  header: "Input"
-  options:
-    - "CSV file — I have a CSV with a SMILES column"
-    - "SMILES strings — I'll paste individual SMILES"
-```
-
-For **CSV file**: ask for the path if not provided. Do NOT force `--smiles-column` from the training config — let `predict.py` auto-detect the column in the user's new data (it tries `SMILES`, `smiles`, `standardized_smiles`, `Stand_SMILES`). Only add `--smiles-column` if the user explicitly specifies a non-standard column name.
-
-For **SMILES strings**: collect the SMILES. Each becomes a `--smiles-list` argument.
-
----
-
-## Step 4: Check for 3D Feature Warning
-
-Read the registry entry's `feature_keys`. If it contains `prolif` or `AffGraph`:
-
-```
-WARNING: This model uses 3D protein-ligand features ({feature_keys}).
-Predictions require corresponding protein structures for each molecule.
-If you don't have matching 3D data, predictions may fail or be unreliable.
-```
-
-Ask via AskUserQuestion whether to proceed.
-
----
-
-## Step 5: Run Prediction
-
-Build the command from the registry entry. The approach depends on `model_format`:
-
-**Merged model** (`model_format: "merged"`, `model_file` is a single string):
-
-Single invocation predicts all properties at once:
-
-```bash
-uv run $MOLAGENT_PLUGIN_ROOT/skills/predict/scripts/predict.py \
-    --model-file {model_file} \
-    {--smiles-file INPUT_CSV | --smiles-list "SMILES1" --smiles-list "SMILES2"} \
-    --output-folder MolagentFiles/ \
-    --verbose
-```
-
-To predict a subset of properties: add `--properties prop1 --properties prop2`.
-
-**Individual models** (`model_format: "individual"`, `model_file` is a list):
-
-One invocation per model file (existing behavior):
-
-```bash
-uv run $MOLAGENT_PLUGIN_ROOT/skills/predict/scripts/predict.py \
-    --model-file {model_file_path} \
-    {--smiles-file INPUT_CSV | --smiles-list "SMILES1" --smiles-list "SMILES2"} \
-    --output-folder MolagentFiles/ \
-    --verbose
-```
-
-Add `--blender-properties {bp}` for each entry in the registry's `blender_properties` array (only for CSV input — the script reads values from the CSV columns).
-
-For CLI SMILES with blender properties, add `--blender-values {prop}={value}` — ask user for values if not provided.
-
----
-
-## Step 6: Show Results
-
-1. Read the output CSV file. The filename is timestamped to avoid overwrites — glob for the most recent file:
-   - Merged model: `MolagentFiles/predictions_*.csv` (latest by modification time)
-   - Individual model: `MolagentFiles/{property}_predictions_*.csv` (latest by modification time)
-   - Or read the path from the `predictions_info_*.json` file written alongside the CSV
-2. Display a table of the first 5-10 predictions
-3. Report total count and output file path
+Display:
+- Number of predictions
+- Summary statistics (mean/std/min/max per property)
+- First 5–10 rows as a table
+- Output CSV path
 
 ```
 Predictions complete!
-
-  Model: {id}
+  Model: {model_id}
   Input: {n} molecules
   Output: {output_path}
 
-Sample predictions:
-  {table of first 5 rows}
-```
+  Summary:
+    {prop1}: mean={mean}, std={std}, range=[{min}, {max}]
 
-For API serving, see the model card for deployment instructions.
+  Sample:
+    {table of first 5 rows}
+```
 
 ---
 
-## Important Notes
+## Notes
 
-- `$MOLAGENT_PLUGIN_ROOT` is the plugin root directory, persisted to `.claude/settings.local.json` by the SessionStart hook. Available in all Bash calls. Takes effect after first session restart following install.
-- Python scripts: `uv run ...` (no venv activation needed — `uv run` handles dependencies)
-- The predict script auto-detects SMILES columns — don't force the training column name on new data
-- Blender properties are auto-detected from `train_info.json` if not explicitly provided
+- Prefer `model_id` over `model_file` for traceability.
+- The predict tool auto-detects SMILES columns — don't force column names from training.
+- Merged models predict all properties in one call; individual models predict one property each.
 
-## Additional Resources
+---
 
-- **[examples.md](examples.md)** — Usage examples
+## Fallback (MCP unavailable)
+
+If the MCP server is not connected, use the script directly:
+
+```bash
+uv run $MOLAGENT_PLUGIN_ROOT/skills/predict/scripts/predict.py \
+    --model-file {path} \
+    --smiles-file {input.csv} \
+    --output-folder "${MOLAGENT_OUTPUT_ROOT:-MolagentFiles}/" \
+    --verbose
+```

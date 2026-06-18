@@ -1,15 +1,19 @@
 
 from pathlib import Path
 import click
+from _paths import default_output_folder, replace_csv_suffix  # noqa: E402
+from _determinism import maybe_seed_everything, force_serial_jobs  # noqa: E402
 import json
 import shutil
 import subprocess
+
+maybe_seed_everything()
 
 
 @click.command()
 @click.option('--model-file', required=True, help='Path to .pt model file')
 @click.option('--test-file', required=True, help='Path to test CSV file (from 02-data-split)')
-@click.option('--output-folder', default='MolagentFiles/', help='Output folder for report and predictions')
+@click.option('--output-folder', default=default_output_folder(), help='Output folder for report and predictions')
 @click.option('--separator', default=',', help='CSV separator')
 @click.option('--smiles-column', default=None, help='SMILES column (auto-detected from train info)')
 @click.option('--property', default=None, help='Property to evaluate (auto-detected from model filename)')

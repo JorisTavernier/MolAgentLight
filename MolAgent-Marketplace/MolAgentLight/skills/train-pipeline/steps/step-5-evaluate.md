@@ -26,6 +26,7 @@ Check `pipeline_state.json`:
 |-----------|--------|
 | regression | `skills/train-pipeline/scripts/evaluate_regression_model.py` |
 | classification | `skills/train-pipeline/scripts/evaluate_classification_model.py` |
+| regression_classification | `skills/train-pipeline/scripts/evaluate_classification_model.py` |
 
 ## Command Construction
 
