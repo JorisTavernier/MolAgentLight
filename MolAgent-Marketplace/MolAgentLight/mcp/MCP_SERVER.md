@@ -755,8 +755,18 @@ The token used doesn't own that model. Use `list_models` to see which models are
 **`Authentication failed (401)`**
 The token has been revoked or is invalid. Generate a new token via `admin_cli.py create-user`.
 
+**`Direct csv_file path access is not allowed` from `start_training_session`**
+The server is running in remote/HTTP mode and cannot access local filesystem paths. Upload the CSV first with `upload_dataset`, then pass the returned `dataset_id` to `start_training_session(dataset_id=...)`. See the train-pipeline SKILL.md Step 0 for the full in-process upload snippet.
+
 **`train_and_visualize` disconnects with `-32000: Connection closed` from Claude Code**
 Expected behavior. `train_and_visualize` uses FastMCP's `task=True` (SEP-1686 background tasks). Claude Code's built-in MCP client does not implement the tasks protocol, so it drops the connection when the server returns a `CreateTaskResult`. Training continues in the background — results land in `MolagentFiles/` as normal. Wait for training to finish (check `MolagentFiles/` for the run folder), reconnect, and call `list_models` to find the completed model. The `task=True` path works as intended from the web app, which uses a FastMCP client that supports SEP-1686.
+
+**`train_and_visualize` aborts with "sent no response or progress for 300s"**
+This is the Claude Code client-side tool execution idle timeout — different from server startup timeout. Training continues on the server despite the client abort. Call `list_models()` to check if the run completed. To prevent this, set `CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT` (ms) in `~/.claude/settings.json`:
+```json
+{ "env": { "CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT": "1800000" } }
+```
+Recommended: `1800000` (30 min). Alternatively, set a per-server `timeout` key in the server's MCP settings entry. Note: `MCP_TIMEOUT` (below) controls server startup only and has no effect here.
 
 **`Task {id} not found` during long training runs**
 The fastmcp client sends a default task TTL of 60s. The web app backend overrides this to 48h in `mcp_client.py`. If you see this error from a custom client, pass `ttl=48*3600*1000` (48h in ms) to `client.call_tool(..., task=True, ttl=...)`. For the remote MCP server, also set `FASTMCP_DOCKET_REDELIVERY_TIMEOUT=86400` to prevent docket from assuming the task is dead during long training.
@@ -765,7 +775,7 @@ The fastmcp client sends a default task TTL of 60s. The web app backend override
 The training process was killed by the OS out-of-memory killer. Reduce `--computational-load` to a lower level, reduce `--n-jobs-inner` to 1, or add swap space. Setting `MOLAGENT_DETERMINISTIC=true` forces single-threaded execution which halves peak memory.
 
 **MCP server times out on startup (Windows)**
-On first run, `uv` may take >30s resolving dependencies before the server is ready. Increase `MCP_TIMEOUT` (milliseconds, Claude env variable) in `~/.claude/settings.json` (global user settings):
+On first run, `uv` may take >30s resolving dependencies before the server is ready. Increase `MCP_TIMEOUT` (milliseconds, Claude env variable) in `~/.claude/settings.json` (global user settings). This only affects server startup — not tool execution timeouts (see above).
 ```json
 { "env": { "MCP_TIMEOUT": "120000" } }
 ```

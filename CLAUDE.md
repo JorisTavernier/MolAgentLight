@@ -161,10 +161,15 @@ If running the MCP server or web app without the Claude Code marketplace (i.e. t
 
 ```bash
 cd MolAgent-Marketplace/MolAgentLight
-uv venv .venv
+uv venv .venv --python 3.12
+source .venv/bin/activate 
 uv pip install -e AutoMol/automol/
 uv pip install "fastmcp[tasks]" pandas pydantic
 cd app/frontend && npm install
+```
+Note that the activation of the environment can be different, for Windows:
+```bash
+source .venv/Scripts/activate
 ```
 
 See `MolAgent-Marketplace/MolAgentLight/app/README.md` for full details.

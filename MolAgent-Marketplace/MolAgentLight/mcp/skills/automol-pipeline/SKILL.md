@@ -1,3 +1,7 @@
+---
+description: Orchestrate the AutoMol molecular property prediction pipeline — training, prediction, model management — via MCP tools. Self-contained guide for remote and local usage.
+---
+
 # AutoMol Pipeline — MCP Skill
 
 You have access to the AutoMol molecular property prediction pipeline via MCP tools. This skill describes how to orchestrate them.
@@ -14,10 +18,25 @@ You have access to the AutoMol molecular property prediction pipeline via MCP to
 | `predict` | Run inference on new molecules. `smiles_file` accepts a path or `dataset_id` |
 | `merge_models` | Merge per-property models into a single multi-property file |
 | `delete_model` | Remove a model from the registry and disk |
+| `download_model` | Download a model's binary (.pt) as base64 by registry ID |
 | `upload_dataset` | Upload CSV (base64) to per-user data registry |
 | `list_datasets` | List datasets owned by the caller |
 | `delete_dataset` | Remove a dataset from the registry and disk |
 | `admin_manage` | Token management + `purge_stale` cleanup (admin only) |
+
+---
+
+## Domain Terms
+
+| Term | Meaning |
+|------|---------|
+| **Regression** | Predict continuous numeric values |
+| **Classification** | Predict discrete classes using classification estimators |
+| **RegressionClassification** | Binary classification via REGRESSION estimators on 0/1 labels — predictions clipped to [0,1] as probabilities. This is NOT "run both tasks simultaneously" |
+| **blender_properties** | Auxiliary numeric columns used as extra input features alongside molecular representations — they are NOT prediction targets |
+| **feature_keys** | Molecular representation methods (Bottleneck, rdkit, fps_2048_2, etc.) — NOT CSV column names |
+| **computational_load** | Runtime budget: `free` ~2 min, `cheap` ~10 min, `moderate` ~1 hr, `expensive` ~24 hr |
+| **dataset_id** | Registry ID (prefix `ds_`) referencing an uploaded CSV — used in place of file paths in remote mode |
 
 ---
 
@@ -39,7 +58,7 @@ MOLAGENT_AUTH_REQUIRED=true \
 uv run mcp/server.py --transport streamable-http --host 127.0.0.1 --port 8001
 ```
 
-The admin token is printed to stderr on first run and saved to `${MOLAGENT_OUTPUT_ROOT}/auth_tokens.json`.
+The admin token is printed to stderr on first run and saved to `${MOLAGENT_OUTPUT_ROOT}/admin_tokens.json`.
 
 **Adding the remote server to Claude Code:**
 
@@ -103,7 +122,36 @@ list_datasets()
 
 If the file was previously uploaded, reuse its `dataset_id`.
 
-### 2. Upload via CLI
+### 2. Find MCP URL and Token (Claude Code)
+
+To run the upload snippet, you need the server URL and Bearer token. For Claude Code users:
+
+1. Read `~/.claude.json` (Windows: `C:/Users/<username>/.claude.json`).
+2. Find the key under `projects` matching the current project path.
+3. Read `.mcpServers.<server-name>.url` and `.mcpServers.<server-name>.headers.Authorization`.
+4. Strip the `"Bearer "` prefix from the Authorization value to get the raw token.
+
+Example structure:
+```json
+{
+  "projects": {
+    "/home/you/project": {
+      "mcpServers": {
+        "automol-mcp": {
+          "url": "http://host:8001/mcp",
+          "headers": { "Authorization": "Bearer molagent_usr_abc123..." }
+        }
+      }
+    }
+  }
+}
+```
+
+If `~/.claude.json` does not contain the server entry, also check `.claude/settings.local.json` and `.claude/settings.json` in the project root.
+
+> **Do not grep for the token** — read the file directly with the Read tool to avoid partial matches or exposing the token in search output.
+
+### 3. Upload via CLI
 
 The base64-encoded file content must NOT pass through LLM I/O (it will be truncated). Use this in-process snippet:
 
@@ -126,7 +174,9 @@ Returns JSON with `dataset_id`, `filename`, `columns`, `row_count`.
 
 > **Why not call `upload_dataset` directly?** The MCP tool parameter `file_content_b64` can exceed Claude's tool-call output/input limits for files >30KB. The snippet above keeps base64 in-process (Python memory only) and only the small result JSON appears in the terminal.
 
-### 3. Use dataset_id
+> **CRITICAL — never do this**: Do NOT run `base64 <file>`, `cat <file> | base64`, or `python -c "print(base64.b64encode(...))"` to display encoded file content in the terminal. The output WILL be truncated by shell output limits, producing corrupted data.
+
+### 4. Use dataset_id
 
 Pass the returned ID to training or prediction:
 ```
@@ -162,11 +212,36 @@ Returns:
 - `options` — valid choices for each field
 - `question` — message to present to the user
 
-**Present the detected config to the user.** The auto-detection may be wrong (e.g., it may pick an ID column as the SMILES column). Always let the user confirm or correct.
+### 3. Present config to the user
+
+Format the detected config clearly:
+
+```
+Dataset: {csv_file or dataset_id} ({characteristics.valid_smiles} molecules)
+SMILES column: {detected.smiles_column}
+Task: {detected.task}
+Targets: {detected.properties}
+Features: {detected.feature_keys}
+Split: {detected.split_strategy}
+Load: {detected.computational_load}
+Log10: {detected.use_log10}
+
+Warnings:
+  {from response.question field}
+```
+
+**Domain notes for the user:**
+- If task is **RegressionClassification**: explain it uses regression estimators on 0/1 labels (not "both tasks").
+- If **blender_properties** are detected: explain these are auxiliary input features, not targets.
+- If **feature_keys** includes unfamiliar names: explain these are molecular representations, not column names.
+
+**SMILES column can be wrong** — datasets often have ID columns that look like SMILES. Always verify with the user.
+
+**Always pause for user confirmation** before proceeding to training — even if the user's original request clearly asked for it. The config summary surfaces critical warnings (mixed target types, log10 flags, skewed targets, null rates) that the user should review before a long-running pipeline.
 
 > **Windows paths:** Pass `C:/Users/...` style paths, not `/c/Users/...` (Git Bash style). The MCP server receives the path as-is and will fail if it can't find the file.
 
-### 3. Apply overrides
+### 4. Apply overrides
 
 When the user wants changes, parse their natural language into typed parameters:
 
@@ -181,7 +256,9 @@ answer_training_question(
 
 You can call this multiple times. Each call returns updated state and asks if there are more changes.
 
-### 4. Confirm
+Use `list_options(category=...)` to discover valid values for feature_keys, estimators, scorers, etc.
+
+### 5. Confirm
 
 ```
 answer_training_question(session_id="...", confirm=True)
@@ -189,7 +266,7 @@ answer_training_question(session_id="...", confirm=True)
 
 Returns `config` — a complete TrainingConfig dict ready for training. Sessions expire after 90 minutes of inactivity.
 
-### 5. Train
+### 6. Train
 
 ```
 train_and_visualize(config={...})
@@ -217,6 +294,10 @@ list_models()
 
 Returns all models accessible to the current token, with IDs, properties, task types, and metrics.
 
+- **0 models**: Tell the user to train first. Stop.
+- **1 model**: Auto-select. Show ID, properties, task type, metrics.
+- **N models**: Present choices (most recent first) with properties and metrics.
+
 ### 2. Run predictions
 
 With a model ID from the registry:
@@ -243,6 +324,8 @@ predict(
     smiles_list=["CCO"]
 )
 ```
+
+**Remote mode:** If the server is remote (HTTP MCP), local CSV paths won't work. Upload the file first (see Upload Dataset workflow) and pass the returned `dataset_id` as `smiles_file`.
 
 Returns:
 - `output_csv` — path to the predictions CSV (stdio) or inline content (remote)
@@ -318,6 +401,27 @@ train_and_visualize(config={
 
 ---
 
+## Error Handling
+
+**"CSV file not found"** from `start_training_session`:
+- Verify the path is absolute. On Windows use `C:/Users/...` (forward slashes), NOT Git Bash style `/c/Users/...`. The MCP server passes paths directly to Python's `Path()`.
+
+**"sent no response or progress for 300s"** from `train_and_visualize`:
+- Training may still be running on the server. Call `list_models()` to check if it completed.
+- To prevent: set `CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT` (ms) in `~/.claude/settings.json` under `"env"`:
+  ```json
+  { "env": { "CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT": "1800000" } }
+  ```
+  1800000 = 30 minutes. For `expensive` runs, use `172800000` (48 hr). This is a **client-side tool execution timeout** — distinct from `MCP_TIMEOUT` (server startup only).
+
+**Training fails mid-pipeline**:
+- Start a new session. The pipeline is atomic — there is no partial resume. Failed runs do not corrupt the registry.
+
+**"Direct csv_file path access is not allowed"**:
+- The server is in remote (auth-required) mode. Upload the CSV first (see Upload Dataset workflow), then use `dataset_id`.
+
+---
+
 ## Key Behaviors
 
 - **Always present detected config to the user** — don't assume auto-detection is correct.
@@ -330,3 +434,6 @@ train_and_visualize(config={
 - **Dashboard is HTML** — it's a self-contained Plotly.js page. Save to a `.html` file for the user to open in a browser.
 - **Use `list_options` in remote mode** before training to discover what feature generators and estimators are installed on that server.
 - **Store the auth token in `claude mcp add --header`**, not in the prompt or conversation — it's a secret.
+- **`download_model` returns base64** — save the decoded bytes to a `.pt` file locally. Useful for backing up models from a remote server.
+- **Confirmation before training is mandatory** — always present the detected config and wait for explicit user approval before calling `train_and_visualize`, even if the user said "just train it."
+- **Remote mode: prefer `dataset_id` over file paths** — once uploaded, reference data by `dataset_id` in all subsequent calls. This eliminates filesystem-access errors.

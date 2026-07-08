@@ -30,12 +30,30 @@ Orchestrate a full training pipeline using the `automol-mcp` MCP tools.
 
 When the MCP server is remote (added via `claude mcp add` with an HTTP URL), there is no shared filesystem. CSV files must be uploaded before training.
 
-**How to detect remote mode**: If `start_training_session(csv_file="...")` fails with "No such file" or "file not found", the server is remote.
+**How to detect remote mode**: If `start_training_session(csv_file="...")` fails with any of these messages, the server is remote and requires file upload:
+- `"Direct csv_file path access is not allowed"`
+- `"No such file"`
+- `"file not found"`
 
 **Upload flow**:
 
 1. Check if already uploaded: call `list_datasets()` and look for a matching filename.
-2. If not uploaded, read `~/.claude.json` and look under `projects.<current-project-path>.mcpServers.automol-mcp` for the `url` and `headers.Authorization` value (strip the `Bearer ` prefix to get the token).
+2. If not uploaded, use the **Read tool** to read `~/.claude.json` (Windows: `C:/Users/<username>/.claude.json`). Find the key under `projects` that matches the current project path, then read `.mcpServers.<server-name>.url` and `.headers.Authorization`. Strip `"Bearer "` from the Authorization value to get the token. Example structure:
+   ```json
+   {
+     "projects": {
+       "C:/Users/you/Projects/MyProject": {
+         "mcpServers": {
+           "molagent": {
+             "url": "http://127.0.0.1:8001/mcp",
+             "headers": { "Authorization": "Bearer molagent_usr_abc123..." }
+           }
+         }
+       }
+     }
+   }
+   ```
+   > **Do not grep for the token** — read the file directly with the Read tool. If `~/.claude.json` doesn't contain the server entry, also check `.claude/settings.local.json` and `.claude/settings.json` in the project root.
 3. Run this upload command via Bash, substituting the three values:
 
 ```bash
@@ -133,7 +151,7 @@ Training Complete!
 ## Error Handling
 
 - If `start_training_session` fails with "CSV file not found": verify the path is absolute (Windows: `C:/Users/...`, not `/c/Users/...`).
-- If `train_and_visualize` disconnects (long-running timeout): call `list_models()` to check if training completed in the background.
+- If `train_and_visualize` times out with "sent no response or progress for 300s": training may still be running on the server. Call `list_models()` to check if it completed. To prevent this, set `CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT=1800000` (30 min) in `~/.claude/settings.json` under `env`, or set a per-server `timeout` in the MCP server config. This is a **client-side tool execution timeout** — distinct from `MCP_TIMEOUT` (which only affects server startup).
 - If training fails mid-pipeline: start a new session. The MCP pipeline is atomic — there is no partial resume.
 
 ---
