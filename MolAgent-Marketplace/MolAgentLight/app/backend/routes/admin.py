@@ -6,15 +6,20 @@ from typing import Literal, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from ..mcp_client import call_tool
+from ..mcp_client import call_tool, MCPAuthError
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
 class AdminManageRequest(BaseModel):
-    action: Literal["create_token", "revoke_user", "rotate_token", "list_users"]
+    action: Literal[
+        "create_token", "revoke_user", "rotate_token", "list_users",
+        "purge_stale", "purge_orphans",
+    ]
     user_id: Optional[str] = None
     owner_id: Optional[str] = None
+    max_age_days: Optional[int] = None
+    force: Optional[bool] = None
 
 
 @router.post("/manage")
@@ -23,6 +28,8 @@ async def admin_manage(req: AdminManageRequest):
     args = req.model_dump(exclude_none=True)
     try:
         result = await call_tool("admin_manage", args)
+    except MCPAuthError as exc:
+        raise HTTPException(403, str(exc))
     except RuntimeError as exc:
         raise HTTPException(500, f"Admin operation failed: {exc}")
     return result

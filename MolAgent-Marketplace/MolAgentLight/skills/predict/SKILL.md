@@ -3,7 +3,13 @@ name: predict
 description: Make predictions using a trained AutoMol model. Auto-discovers models from the registry. Use when the user wants to run inference on new molecules.
 allowed-tools: Read, Glob, Bash, AskUserQuestion,
   mcp__plugin_MolAgentLight_automol-mcp__list_models,
-  mcp__plugin_MolAgentLight_automol-mcp__predict
+  mcp__plugin_MolAgentLight_automol-mcp__predict,
+  mcp__plugin_MolAgentLight_automol-mcp__upload_dataset,
+  mcp__plugin_MolAgentLight_automol-mcp__list_datasets,
+  mcp__automol-mcp__list_models,
+  mcp__automol-mcp__predict,
+  mcp__automol-mcp__upload_dataset,
+  mcp__automol-mcp__list_datasets
 ---
 
 # AutoMol — Predict
@@ -29,6 +35,32 @@ If the user provided SMILES or a CSV path in their message, use it directly.
 Otherwise ask:
 - CSV file with a SMILES column → pass as `smiles_file`
 - Individual SMILES strings → pass as `smiles_list`
+
+**Remote mode (no shared filesystem):** If the server is remote (HTTP MCP — check `.claude/settings.json` or `.claude/settings.local.json`), a local CSV path won't work. Upload the file first, then pass the returned `dataset_id` as `smiles_file` (IDs starting with `ds_` are auto-resolved by the predict tool).
+
+Upload flow:
+1. Call `list_datasets()` to check if already uploaded.
+2. Read `~/.claude.json` and look under `projects.<current-project-path>.mcpServers.automol-mcp` for the `url` and `headers.Authorization` (strip `Bearer ` prefix for token).
+3. Run:
+
+```bash
+uv run --with fastmcp python -c "
+import asyncio,base64,json,sys,os
+async def main():
+    from fastmcp import Client
+    from fastmcp.client.transports import StreamableHttpTransport
+    t=StreamableHttpTransport(sys.argv[2],headers={'Authorization':f'Bearer {sys.argv[3]}'})
+    async with Client(t) as c:
+        b64=base64.b64encode(open(sys.argv[1],'rb').read()).decode()
+        r=await c.call_tool('upload_dataset',{'filename':os.path.basename(sys.argv[1]),'file_content_b64':b64})
+        print(r.content[0].text)
+asyncio.run(main())
+" "<CSV_PATH>" "<MCP_URL>" "<TOKEN>"
+```
+
+4. Parse JSON output → use `dataset_id` as `smiles_file`.
+
+> **CRITICAL**: Never run `base64 <file>` or `python -c "print(b64encode(...))"` to display encoded content — it WILL be truncated. The snippet above keeps base64 in-process.
 
 ### Step 3: Check Blender Requirements
 

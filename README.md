@@ -2,11 +2,11 @@
 
 MolAgent is an end-to-end ML pipeline for molecular property prediction from SMILES data. It uses ensemble stacking models with pretrained molecular encoders and ships as a **Claude Code plugin**, an **MCP server**, and a **browser-based web app**.
 
-### Update June 18, 2026
+### Update June 12, 2026
 
 Previously MolAgent only had Claude Code skills (LLM-driven orchestration). This version adds a deterministic pipeline layer and a full web interface:
 
-- **MCP server** — 12-tool API that runs the pipeline deterministically (no LLM in the loop). Supports stdio (Claude Code plugin) and streamable-http (remote deployment) transports.
+- **MCP server** — 13-tool API that runs the pipeline deterministically (no LLM in the loop). Supports stdio (Claude Code plugin) and streamable-http (remote deployment) transports.
 - **Multi-user authentication** — Bearer token auth with per-user model/dataset isolation, admin token management, user creation/revocation/rotation.
 - **Web app** — SvelteKit 5 + FastAPI browser UI connecting to the MCP server (local or remote) with real-time step-by-step progress tracking.
 - **Data registry** — Upload datasets (base64), per-user isolation, `dataset_id` references across training and prediction.
@@ -93,11 +93,13 @@ pip install -e MolAgent-Marketplace/MolAgentLight/AutoMol/automol/
 
 ```bash
 cd MolAgent-Marketplace/MolAgentLight
-uv venv .venv
+uv venv .venv --python 3.12
+source .venv/bin/activate
 uv pip install -e AutoMol/automol/
-uv pip install fastmcp pandas pydantic
+uv pip install "fastmcp[tasks]" pandas pydantic
 cd app/frontend && npm install
 ```
+Activating the environment can be different on Windows.
 
 ---
 
@@ -178,7 +180,7 @@ uv run ... uvicorn backend.main:app --port 8000
 
 ## Usage — MCP Server (standalone / remote)
 
-The MCP server exposes 12 tools callable from any MCP client.
+The MCP server exposes 13 tools callable from any MCP client.
 
 ### Start (local stdio — used automatically by Claude Code plugin)
 
@@ -285,5 +287,20 @@ The global `MolagentFiles/model_registry.json` indexes all runs and is the sourc
 | `MOLAGENT_AUTH_REQUIRED` | Enable token auth on MCP server | off |
 | `MOLAGENT_DETERMINISTIC` | Seed RNGs, force serial CV | off |
 | `PHARMAOS_MOLAGENT_ROOT` | Nexus per-project output root (overrides `MOLAGENT_OUTPUT_ROOT`) | — |
+| `MCP_TIMEOUT` | Max time (ms) for MCP server to start/connect | `120000` |
+| `MCP_TOOL_TIMEOUT` | Max time (ms) a single MCP tool call can run | `300000` |
+
+For long training runs, set these in `~/.claude/settings.json` under `"env"`:
+
+```json
+{
+  "env": {
+    "MCP_TIMEOUT": "1800000",
+    "MCP_TOOL_TIMEOUT": "172800000"
+  }
+}
+```
+
+`MCP_TIMEOUT=1800000` (30 min) covers slow first-time `uv` dependency resolution. `MCP_TOOL_TIMEOUT=172800000` (48 hr) covers `expensive` computational load training.
 
 Full contract in `MolAgent-Marketplace/MolAgentLight/CLAUDE.md`.

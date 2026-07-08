@@ -1007,6 +1007,7 @@ async def list_models(ctx: Context) -> dict:
     Use the returned model IDs with the predict and delete_model tools.
     """
     caller = _get_caller(ctx)
+    caller = _require_auth(caller)
 
     registry_path = _registry_path()
     if not registry_path.exists():
@@ -1022,11 +1023,8 @@ async def list_models(ctx: Context) -> dict:
     except (json.JSONDecodeError, OSError):
         data = []
 
-    if caller is None:
-        is_admin, owner_id = True, None
-    else:
-        _, is_admin = _caller_privileges(caller)
-        owner_id = caller.get("owner_id")
+    _, is_admin = _caller_privileges(caller)
+    owner_id = caller.get("owner_id")
 
     models = []
     for entry in data:
@@ -1408,7 +1406,7 @@ async def merge_models(
     # Determine output path
     output_root = _output_root()
     from datetime import datetime
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     suffix = "reg" if "regression" in task_type else "clf"
     merged_name = output_name or f"merged_{timestamp}"
     merged_folder = output_root / f"merged-{merged_name}"
@@ -1428,11 +1426,11 @@ async def merge_models(
     except RuntimeError as exc:
         raise McpError(ErrorData(code=INTERNAL_ERROR, message=f"Merge failed: {exc}"))
 
-    # Parse merge result
-    try:
-        merge_result = json.loads(stdout.strip().split("\n")[-1])
-    except (json.JSONDecodeError, IndexError):
-        merge_result = {}
+    if not output_file.exists():
+        raise McpError(ErrorData(
+            code=INTERNAL_ERROR,
+            message=f"Merge script completed but output file not found: {output_file}",
+        ))
 
     # Combine metrics from source models
     combined_metrics = {}
@@ -1626,10 +1624,10 @@ async def download_model(model_id: str, ctx: Context) -> dict:
     else:
         raise McpError(ErrorData(code=INTERNAL_ERROR, message="Invalid model_file in registry."))
 
-    if not model_path.exists():
+    try:
+        model_bytes = model_path.read_bytes()
+    except OSError:
         raise McpError(ErrorData(code=INTERNAL_ERROR, message=f"Model file not found: {model_path}"))
-
-    model_bytes = model_path.read_bytes()
     model_b64 = base64.b64encode(model_bytes).decode()
 
     touch_registry_entry(registry_path, model_id)
@@ -1847,8 +1845,8 @@ async def admin_manage(
         action: The admin action to perform.
         user_id: Required for create_token — the username to assign.
         owner_id: Required for revoke_user / rotate_token — the unique handle from list_users.
-        max_age_days: Required for purge_stale — entries older than this are purged.
-        force: For purge_stale — if False (default), dry-run only.
+        max_age_days: Required for purge_stale and purge_orphans — entries/folders older than this are purged.
+        force: For purge_stale/purge_orphans — if False (default), dry-run only.
     """
     caller = _get_caller(ctx)
     caller = _require_auth(caller)

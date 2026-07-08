@@ -116,12 +116,16 @@ def main(**kwargs):
     class_property = prediction_property
 
     # Read train info to get metadata
-    train_info_path = str(Path(output_folder) / f'{property_name}_train_info.json')
+    # Training saves as {prop}_train_info.json where prop includes Class_ prefix
+    train_info_path = str(Path(output_folder) / f'{prediction_property}_train_info.json')
     if not Path(train_info_path).exists():
-        # Try in the same folder as the model file
-        alt_path = model_file.replace('.pt', '_train_info.json')
-        if Path(alt_path).exists():
-            train_info_path = alt_path
+        # Fallback: try without prefix
+        alt_path1 = str(Path(output_folder) / f'{property_name}_train_info.json')
+        alt_path2 = model_file.replace('.pt', '_train_info.json')
+        if Path(alt_path1).exists():
+            train_info_path = alt_path1
+        elif Path(alt_path2).exists():
+            train_info_path = alt_path2
 
     labelnames = None
     if Path(train_info_path).exists():

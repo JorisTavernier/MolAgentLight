@@ -91,6 +91,51 @@ uv run mcp/admin_cli.py --url http://host:8001/mcp --token <ADMIN_TOKEN> rotate 
 
 ---
 
+## Workflow: Upload Dataset (Remote Mode)
+
+When connected to a remote server (streamable-http), filesystem paths are inaccessible. Upload CSV files first, then reference them by `dataset_id`.
+
+### 1. Check existing datasets
+
+```
+list_datasets()
+```
+
+If the file was previously uploaded, reuse its `dataset_id`.
+
+### 2. Upload via CLI
+
+The base64-encoded file content must NOT pass through LLM I/O (it will be truncated). Use this in-process snippet:
+
+```bash
+uv run --with fastmcp python -c "
+import asyncio,base64,json,sys,os
+async def main():
+    from fastmcp import Client
+    from fastmcp.client.transports import StreamableHttpTransport
+    t=StreamableHttpTransport(sys.argv[2],headers={'Authorization':f'Bearer {sys.argv[3]}'})
+    async with Client(t) as c:
+        b64=base64.b64encode(open(sys.argv[1],'rb').read()).decode()
+        r=await c.call_tool('upload_dataset',{'filename':os.path.basename(sys.argv[1]),'file_content_b64':b64})
+        print(r.content[0].text)
+asyncio.run(main())
+" "/path/to/data.csv" "http://host:8001/mcp" "molagent_usr_..."
+```
+
+Returns JSON with `dataset_id`, `filename`, `columns`, `row_count`.
+
+> **Why not call `upload_dataset` directly?** The MCP tool parameter `file_content_b64` can exceed Claude's tool-call output/input limits for files >30KB. The snippet above keeps base64 in-process (Python memory only) and only the small result JSON appears in the terminal.
+
+### 3. Use dataset_id
+
+Pass the returned ID to training or prediction:
+```
+start_training_session(dataset_id="ds_abc123...")
+predict(model_id="...", smiles_file="ds_abc123...")
+```
+
+---
+
 ## Workflow: Training a New Model
 
 ### 1. Discover options (optional)
@@ -236,7 +281,7 @@ Admin tokens can delete any model. User tokens can only delete their own.
 ## Workflow: Manage Users (Admin Only)
 
 ```
-admin_manage(action="create_user", username="alice")
+admin_manage(action="create_token", user_id="alice")
     → { token: "molagent_usr_..." }
 
 admin_manage(action="list_users")

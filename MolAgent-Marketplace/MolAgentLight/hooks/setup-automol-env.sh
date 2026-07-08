@@ -88,7 +88,7 @@ else
 fi
 
 echo "Installing fastmcp (required for MCP server) ..." >&2
-uv pip install fastmcp >/dev/null 2>&1 || echo "WARNING: fastmcp install failed; MCP server tools may be unavailable" >&2
+uv pip install "fastmcp[tasks]" >/dev/null 2>&1 || echo "WARNING: fastmcp install failed; MCP server tools may be unavailable" >&2
 
 # 4. Persist env to settings.local.json so vars are available in all Bash calls
 #    (including subagents). Uses lock + tempfile + os.replace for atomicity and

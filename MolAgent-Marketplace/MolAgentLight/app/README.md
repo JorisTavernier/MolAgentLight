@@ -29,7 +29,7 @@ cd MolAgent-Marketplace/MolAgentLight
 # Create venv and install AutoMol + dependencies
 uv venv .venv
 uv pip install -e AutoMol/automol/
-uv pip install fastmcp pandas pydantic
+uv pip install "fastmcp[tasks]" pandas pydantic
 
 # Install frontend dependencies
 cd app/frontend && npm install && cd ../..

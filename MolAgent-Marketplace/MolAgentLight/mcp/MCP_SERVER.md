@@ -6,7 +6,7 @@ An MCP server that exposes the AutoMol molecular property prediction pipeline as
 
 ## Overview
 
-The server provides twelve tools:
+The server provides thirteen tools:
 
 | Tool | Type | Purpose |
 |------|------|---------|
@@ -76,7 +76,7 @@ predict(model_id="Caco2_wang-Y-20260403_1121", smiles_list=["CCO", "c1ccccc1"])
 
 ```
 MolAgent-Marketplace/MolAgentLight/
-├── .mcp.json                          # MCP server registration (auto-loaded by Claude Code)
+├── .claude-plugin/plugin.json         # Plugin manifest (registers MCP server via mcpServers key)
 ├── mcp/
 │   ├── server.py                      # FastMCP server entry point — defines tools + auth
 │   ├── _auth.py                       # Token store management (validate, create, revoke)
@@ -84,6 +84,7 @@ MolAgent-Marketplace/MolAgentLight/
 │   ├── _sanitize.py                   # Strips filesystem paths from remote responses
 │   ├── _config.py                     # TrainingConfig + PredictConfig + TrainingResult Pydantic models
 │   ├── _pipeline.py                   # Pipeline orchestrator — calls pipeline scripts as subprocesses
+│   ├── _discovery.py                  # Discovery utilities (model/dataset resolution)
 │   ├── admin_cli.py                   # CLI for remote user/admin management (PEP 723 script)
 │   ├── test_mcp_server.py            # End-to-end integration tests against running remote server
 │   ├── skills/
@@ -222,7 +223,7 @@ uv run --active python -c "import automol, fastmcp; print('OK')"
 ```bash
 cd MolAgent-Marketplace/MolAgentLight
 uv venv .venv
-uv pip install AutoMol/automol/ fastmcp[tasks] pandas
+uv pip install AutoMol/automol/ "fastmcp[tasks]" pandas pydantic
 ```
 
 ---
@@ -231,7 +232,7 @@ uv pip install AutoMol/automol/ fastmcp[tasks] pandas
 
 ### Via plugin (recommended)
 
-The `.mcp.json` file at the plugin root is auto-discovered when the plugin loads. No manual config needed — just install the plugin:
+The `mcpServers` key in `.claude-plugin/plugin.json` is auto-discovered when the plugin loads. No manual config needed — just install the plugin:
 
 ```
 /plugin install MolAgentLight@molagent-marketplace
@@ -263,7 +264,7 @@ claude mcp add automol-mcp \
   --header "Authorization: Bearer molagent_usr_..."
 ```
 
-Or in `.mcp.json`:
+Or in `.claude/settings.json` (or project `.claude/settings.local.json`):
 ```json
 {
   "mcpServers": {
@@ -383,6 +384,23 @@ Uploaded datasets are tracked in `${MOLAGENT_OUTPUT_ROOT}/data_registry.json`. E
 |-----------|------|----------|-------------|
 | `filename` | `str` | Yes | Original filename (e.g. `"molecules.csv"`) |
 | `file_content_b64` | `str` | Yes | Base64-encoded CSV file content |
+
+> **Claude Code CLI users:** Do NOT pass `file_content_b64` through the MCP tool call directly — base64 of files >30KB will be truncated by LLM I/O limits. Instead, use the in-process upload snippet that keeps base64 in Python memory:
+>
+> ```bash
+> uv run --with fastmcp python -c "
+> import asyncio,base64,json,sys,os
+> async def main():
+>     from fastmcp import Client
+>     from fastmcp.client.transports import StreamableHttpTransport
+>     t=StreamableHttpTransport(sys.argv[2],headers={'Authorization':f'Bearer {sys.argv[3]}'})
+>     async with Client(t) as c:
+>         b64=base64.b64encode(open(sys.argv[1],'rb').read()).decode()
+>         r=await c.call_tool('upload_dataset',{'filename':os.path.basename(sys.argv[1]),'file_content_b64':b64})
+>         print(r.content[0].text)
+> asyncio.run(main())
+> " "/path/to/data.csv" "http://host:8001/mcp" "molagent_usr_..."
+> ```
 
 ### list_datasets Response
 
@@ -681,7 +699,7 @@ uv run mcp/test_mcp_server.py \
     --token-file MolagentFiles/auth_tokens.json
 ```
 
-The `test_mcp_server.py` script tests all 12 tools with valid and invalid inputs,
+The `test_mcp_server.py` script tests all 13 tools with valid and invalid inputs,
 exercises all new parameter overrides (classification, refit, sample weights),
 runs full training pipelines, prediction, model merging, dataset upload/list/delete,
 and purge_stale. Requires a running server with `MOLAGENT_AUTH_REQUIRED=true`.
@@ -692,7 +710,7 @@ and purge_stale. Requires a running server with `MOLAGENT_AUTH_REQUIRED=true`.
 
 | Variable | Purpose | Set by |
 |----------|---------|--------|
-| `MOLAGENT_PLUGIN_ROOT` | Plugin root directory | SessionStart hook / `.mcp.json` |
+| `MOLAGENT_PLUGIN_ROOT` | Plugin root directory | SessionStart hook / plugin.json |
 | `MOLAGENT_OUTPUT_ROOT` | Where run folders and registry live | SessionStart hook |
 | `PHARMAOS_MOLAGENT_ROOT` | Per-project output root (Nexus, takes precedence) | Nexus host |
 | `MOLAGENT_REGISTRY_PATH` | Full path override for `model_registry.json` | User |
@@ -708,7 +726,7 @@ and purge_stale. Requires a running server with `MOLAGENT_AUTH_REQUIRED=true`.
 ## Troubleshooting
 
 **`ModuleNotFoundError: No module named 'fastmcp'`**
-Run: `uv pip install fastmcp`
+Run: `uv pip install "fastmcp[tasks]"`
 
 **`ModuleNotFoundError: No module named 'pandas'`**
 Run: `uv pip install pandas`

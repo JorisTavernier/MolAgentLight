@@ -4,7 +4,7 @@
 
 This is a Claude Code plugin for the AutoMol molecular ML library. Three layers:
 
-1. **MCP server** (`mcp/`) — Single execution path. Orchestrates all pipeline operations (12 tools over stdio or streamable-http).
+1. **MCP server** (`mcp/`) — Single execution path. Orchestrates all pipeline operations (13 tools over stdio or streamable-http).
 2. **Skills** (`skills/`) — Thin UX guides that teach the LLM how to use MCP tools. They define what to present to users and when to ask questions, but do NOT call scripts directly.
 3. **Scripts** (`skills/*/scripts/`) — Algorithm layer. Called internally by the MCP server's `_pipeline.py` orchestrator.
 
@@ -186,15 +186,17 @@ All this is encapsulated in `skills/train-pipeline/scripts/_paths.py::get_output
 
 ## MCP Server
 
-The MCP server (`mcp/server.py`) wraps the pipeline as 12 tools callable from any MCP client. It uses `_pipeline.py::run_full_pipeline()` for the training orchestration. The server reports progress at each step via `ctx.report_progress(progress=step, total=8, message=label)`.
+The MCP server (`mcp/server.py`) wraps the pipeline as 13 tools callable from any MCP client. It uses `_pipeline.py::run_full_pipeline()` for the training orchestration. The server reports progress at each step via `ctx.report_progress(progress=step, total=8, message=label)`.
 
-Tools: `list_options`, `start_training_session`, `answer_training_question`, `train_and_visualize`, `list_models`, `predict`, `merge_models`, `delete_model`, `upload_dataset`, `list_datasets`, `delete_dataset`, `admin_manage`. Full docs in `mcp/MCP_SERVER.md`.
+Tools: `list_options`, `start_training_session`, `answer_training_question`, `train_and_visualize`, `list_models`, `predict`, `merge_models`, `delete_model`, `download_model`, `upload_dataset`, `list_datasets`, `delete_dataset`, `admin_manage`. Full docs in `mcp/MCP_SERVER.md`.
 
 ### Data Registry
 
 Uploaded datasets are tracked in `${MOLAGENT_OUTPUT_ROOT}/data_registry.json` (`mcp/_data_registry.py`). Each entry stores: `id`, `filename`, `owner`, `file_path` (relative to output root), `size_bytes`, `columns`, `row_count`, `uploaded_at`, `last_used`. Files are stored at `uploads/<owner_id>/<filename>` under the output root.
 
 `start_training_session` and `predict` both accept `dataset_id` as an alternative to direct file paths. When a `csv_file` path is provided directly (local/CLI mode), the file is automatically registered in the data registry on first use.
+
+**Remote upload caveat:** When Claude Code calls `upload_dataset` on a remote MCP server, base64 content >30KB will be truncated by LLM I/O limits. The train-pipeline and predict skills include an in-process upload snippet (`uv run --with fastmcp python -c "..."`) that keeps base64 in Python memory and uses `fastmcp.Client` to POST directly. See the train-pipeline SKILL.md Step 0 for the full snippet.
 
 ### last_used Tracking
 

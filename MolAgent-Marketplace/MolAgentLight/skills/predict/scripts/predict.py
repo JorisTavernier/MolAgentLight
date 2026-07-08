@@ -166,13 +166,13 @@ def main(**kwargs):
     else:
         raise ValueError('Must provide either --smiles-file or at least one --smiles-list')
 
-    # Filter out NaN/empty SMILES
-    original_count = len(smiles_list)
-    smiles_list = [s for s in smiles_list if pd.notna(s) and str(s).strip()]
-    if len(smiles_list) < original_count:
-        dropped = original_count - len(smiles_list)
-        print(f'Warning: Dropped {dropped} empty/NaN SMILES ({len(smiles_list)} remaining)')
-    if not smiles_list:
+    # Identify valid SMILES (NaN/empty will get NaN predictions)
+    valid_mask = [pd.notna(s) and bool(str(s).strip()) for s in smiles_list]
+    valid_smiles = [s for s, v in zip(smiles_list, valid_mask) if v]
+    n_invalid = len(smiles_list) - len(valid_smiles)
+    if n_invalid:
+        print(f'Warning: {n_invalid} empty/NaN SMILES will receive NaN predictions')
+    if not valid_smiles:
         raise ValueError('No valid SMILES provided after filtering NaN/empty values')
 
     # Load model
@@ -307,6 +307,11 @@ def main(**kwargs):
                 other_columns = [col for col in input_df.columns if col != smiles_column]
             if not smiles_list:
                 raise ValueError('No valid rows remaining after removing NaN blender values')
+            # Recompute valid_mask after blender filtering changed smiles_list
+            valid_mask = [pd.notna(s) and bool(str(s).strip()) for s in smiles_list]
+            valid_smiles = [s for s, v in zip(smiles_list, valid_mask) if v]
+            if not valid_smiles:
+                raise ValueError('No valid SMILES remaining after blender NaN filtering')
             blender_properties_dict = {bp: input_df[bp].values for bp in blender_properties}
             if verbose:
                 print(f'Read blender properties from CSV: {list(blender_properties_dict.keys())}')
@@ -335,9 +340,9 @@ def main(**kwargs):
             if verbose:
                 print(f'Using CLI blender values: {blender_properties_dict}')
 
-    # Make predictions
+    # Make predictions (only on valid SMILES)
     if verbose:
-        print(f'Generating predictions for {len(smiles_list)} SMILES...')
+        print(f'Generating predictions for {len(valid_smiles)} SMILES...')
 
     # Back-transform log10 predictions unless explicitly overridden by CLI
     cli_convert = kwargs['convert_log10']
@@ -348,7 +353,7 @@ def main(**kwargs):
 
     predictions = stacked_model.predict(
         props=properties_to_predict,
-        smiles=smiles_list,
+        smiles=valid_smiles,
         blender_properties_dict=blender_properties_dict,
         compute_SD=compute_sd,
         convert_log10=convert_log10
@@ -357,7 +362,21 @@ def main(**kwargs):
     if verbose:
         print('Predictions generated successfully')
 
-    # Create output DataFrame
+    # Build full-length output (NaN for invalid SMILES rows)
+    import numpy as np
+    valid_indices = [i for i, v in enumerate(valid_mask) if v]
+    n_total = len(smiles_list)
+
+    def _expand(values):
+        """Scatter valid-only prediction array back to full length."""
+        if len(values) == 0:
+            return np.full(n_total, np.nan)
+        full = np.full(n_total, np.nan, dtype=object if isinstance(values[0], str) else float)
+        for idx, val in zip(valid_indices, values):
+            full[idx] = val
+        return full
+
+    # Create output DataFrame with all original SMILES (including NaN)
     output_df = pd.DataFrame({smiles_column: smiles_list})
 
     # Add predictions for each property
@@ -375,7 +394,7 @@ def main(**kwargs):
 
             # Classification output
             if f'predicted_labels_{prop}' in predictions:
-                output_df[f'predicted_{class_property}'] = predictions[f'predicted_labels_{prop}']
+                output_df[f'predicted_{class_property}'] = _expand(predictions[f'predicted_labels_{prop}'])
 
             # Add class probabilities
             labelnames = {}
@@ -397,18 +416,18 @@ def main(**kwargs):
                 proba_key = f'predicted_proba_{prop}_class_{class_name}'
                 if proba_key in predictions:
                     col_name = f'prob_{class_name}' if not is_merged else f'prob_{display_prop}_{class_name}'
-                    output_df[col_name] = predictions[proba_key]
+                    output_df[col_name] = _expand(predictions[proba_key])
         else:
             # Regression output — when convert_log10 is active, stacking.predict()
             # creates a clean key (predicted_{stripped}) alongside the log-space key.
             pred_key = f'predicted_{display_prop}' if display_prop != prop and f'predicted_{display_prop}' in predictions else f'predicted_{prop}'
             if pred_key in predictions:
-                output_df[f'predicted_{display_prop}'] = predictions[pred_key]
+                output_df[f'predicted_{display_prop}'] = _expand(predictions[pred_key])
 
             # Add uncertainty if available
             sd_key = f'SD_{display_prop}' if display_prop != prop and f'SD_{display_prop}' in predictions else f'SD_{prop}'
             if sd_key in predictions:
-                output_df[f'SD_{display_prop}'] = predictions[sd_key]
+                output_df[f'SD_{display_prop}'] = _expand(predictions[sd_key])
 
     # Add other columns from input file if available
     if other_columns and smiles_file is not None:

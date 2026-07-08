@@ -423,7 +423,6 @@ def main(**kwargs):
         except Exception as e:
             print(f'Error generating PDF: {e}')
             print('Continuing with CSV output...')
-            raise e
 
     # Save predictions to CSV
     predictions_csv_path = str(Path(output_folder) / f'{property_name}_evaluation_predictions.csv')

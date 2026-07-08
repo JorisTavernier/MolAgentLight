@@ -28,7 +28,7 @@ Then:
 ### Standalone (development)
 
 ```bash
-cd /path/to/MolAgent-Marketplace/plugins/MolAgentLight
+cd /path/to/MolAgent-Marketplace/MolAgentLight
 claude
 > /train-pipeline
 > /predict
@@ -135,11 +135,27 @@ export UV_NATIVE_TLS=true
 The SessionStart hook exports two variables via `.claude/settings.local.json`:
 
 - **`AUTOMOL_ROOT`** — Repository root. Falls back from `CLAUDE_PROJECT_DIR` to `PWD`.
-- **`MOLAGENT_PLUGIN_ROOT`** — Plugin root where `skills/` lives. Falls back from `CLAUDE_PLUGIN_ROOT` to `$AUTOMOL_ROOT/MolAgent-Marketplace/plugins/MolAgentLight`.
+- **`MOLAGENT_PLUGIN_ROOT`** — Plugin root where `skills/` lives. Falls back from `CLAUDE_PLUGIN_ROOT` to `$AUTOMOL_ROOT/MolAgent-Marketplace/MolAgentLight`.
 
 On first install, the hook writes these to `.claude/settings.local.json`. **Restart Claude Code once** after installing — on next start, both vars are injected into every Bash tool call, including subagents.
 
 Skill files use `$MOLAGENT_PLUGIN_ROOT/skills/...` for all script paths.
+
+### MCP Timeouts
+
+Training runs can take minutes to hours. To prevent Claude Code from timing out MCP connections or tool calls, add these to your global `~/.claude/settings.json` under `"env"`:
+
+```json
+{
+  "env": {
+    "MCP_TIMEOUT": "1800000",
+    "MCP_TOOL_TIMEOUT": "172800000"
+  }
+}
+```
+
+- **`MCP_TIMEOUT`** — Maximum time (ms) to wait for the MCP server to start and connect. `1800000` = 30 minutes (covers slow first-time dependency resolution by `uv`).
+- **`MCP_TOOL_TIMEOUT`** — Maximum time (ms) a single MCP tool call can run before being aborted. `172800000` = 48 hours (covers `expensive` computational load training runs).
 
 ## Configuration
 

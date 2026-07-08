@@ -20,10 +20,14 @@ async def serve_dashboard(run_id: str):
     writes in remote mode), then the MCP output_root (local mode)."""
     output_folder = get_mcp_settings().output_folder
     if output_folder:
-        path = Path(output_folder) / run_id / "dashboard.html"
+        path = (Path(output_folder) / run_id / "dashboard.html").resolve()
+        if not path.is_relative_to(Path(output_folder).resolve()):
+            raise HTTPException(400, "Invalid run_id")
         if path.exists():
             return HTMLResponse(path.read_text(encoding="utf-8"))
-    html_path = settings.output_root / run_id / "dashboard.html"
+    html_path = (settings.output_root / run_id / "dashboard.html").resolve()
+    if not html_path.is_relative_to(settings.output_root.resolve()):
+        raise HTTPException(400, "Invalid run_id")
     if html_path.exists():
         return HTMLResponse(html_path.read_text(encoding="utf-8"))
     raise HTTPException(404, "Dashboard not available for this run")

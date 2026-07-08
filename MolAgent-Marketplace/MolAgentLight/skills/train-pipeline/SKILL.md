@@ -6,7 +6,16 @@ allowed-tools: Read, Glob, Bash, AskUserQuestion,
   mcp__plugin_MolAgentLight_automol-mcp__start_training_session,
   mcp__plugin_MolAgentLight_automol-mcp__answer_training_question,
   mcp__plugin_MolAgentLight_automol-mcp__train_and_visualize,
-  mcp__plugin_MolAgentLight_automol-mcp__list_models
+  mcp__plugin_MolAgentLight_automol-mcp__list_models,
+  mcp__plugin_MolAgentLight_automol-mcp__upload_dataset,
+  mcp__plugin_MolAgentLight_automol-mcp__list_datasets,
+  mcp__automol-mcp__list_options,
+  mcp__automol-mcp__start_training_session,
+  mcp__automol-mcp__answer_training_question,
+  mcp__automol-mcp__train_and_visualize,
+  mcp__automol-mcp__list_models,
+  mcp__automol-mcp__upload_dataset,
+  mcp__automol-mcp__list_datasets
 ---
 
 # AutoMol — Training Pipeline
@@ -16,6 +25,40 @@ Orchestrate a full training pipeline using the `automol-mcp` MCP tools.
 ---
 
 ## Workflow
+
+### Step 0: Upload Dataset (Remote Mode)
+
+When the MCP server is remote (added via `claude mcp add` with an HTTP URL), there is no shared filesystem. CSV files must be uploaded before training.
+
+**How to detect remote mode**: If `start_training_session(csv_file="...")` fails with "No such file" or "file not found", the server is remote.
+
+**Upload flow**:
+
+1. Check if already uploaded: call `list_datasets()` and look for a matching filename.
+2. If not uploaded, read `~/.claude.json` and look under `projects.<current-project-path>.mcpServers.automol-mcp` for the `url` and `headers.Authorization` value (strip the `Bearer ` prefix to get the token).
+3. Run this upload command via Bash, substituting the three values:
+
+```bash
+uv run --with fastmcp python -c "
+import asyncio,base64,json,sys,os
+async def main():
+    from fastmcp import Client
+    from fastmcp.client.transports import StreamableHttpTransport
+    t=StreamableHttpTransport(sys.argv[2],headers={'Authorization':f'Bearer {sys.argv[3]}'})
+    async with Client(t) as c:
+        b64=base64.b64encode(open(sys.argv[1],'rb').read()).decode()
+        r=await c.call_tool('upload_dataset',{'filename':os.path.basename(sys.argv[1]),'file_content_b64':b64})
+        print(r.content[0].text)
+asyncio.run(main())
+" "<CSV_PATH>" "<MCP_URL>" "<TOKEN>"
+```
+
+4. Parse the JSON output to get `dataset_id`.
+5. Use `start_training_session(dataset_id="<dataset_id>")` in Step 1.
+
+> **CRITICAL — never do this**: Do NOT run `base64 <file>`, `cat <file> | base64`, or `python -c "print(base64.b64encode(...))"` to display encoded file content in the terminal. The output WILL be truncated by shell output limits, producing corrupted data. The snippet above keeps base64 entirely in-process.
+
+---
 
 ### Step 1: Start Session
 

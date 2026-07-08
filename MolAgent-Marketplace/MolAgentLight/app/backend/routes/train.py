@@ -284,7 +284,16 @@ async def list_runs():
 
 @router.get("/runs/{run_id}")
 async def get_run(run_id: str):
-    path = settings.output_root / run_id / "pipeline_state.json"
+    output_folder = get_mcp_settings().output_folder
+    if output_folder:
+        path = (Path(output_folder) / run_id / "pipeline_state.json").resolve()
+        if not path.is_relative_to(Path(output_folder).resolve()):
+            raise HTTPException(400, "Invalid run_id")
+        if path.exists():
+            return json.loads(path.read_text(encoding="utf-8"))
+    path = (settings.output_root / run_id / "pipeline_state.json").resolve()
+    if not path.is_relative_to(settings.output_root.resolve()):
+        raise HTTPException(400, "Invalid run_id")
     if not path.exists():
         raise HTTPException(404, f"Run {run_id} not found")
     return json.loads(path.read_text(encoding="utf-8"))

@@ -74,13 +74,13 @@ ${AUTOMOL_VENV:-.venv}/Scripts/activate
 
 The core library (`MolAgent-Marketplace/MolAgentLight/AutoMol/automol/automol/`) provides:
 
-- **stacking.py** — Main `StackingRegressor` and `StackingClassifier` classes with ensemble methods
+- **stacking.py** — Main model classes (`FeatureGenerationStackingRegressors`, `FeatureGenerationStackingClassifiers`, etc.) with ensemble methods, plus `save_model()` / `load_model()` and per-class `merge_model()` methods
 - **feature_generators.py** — Molecular feature generators:
   - `BottleneckTransformer` / `OnnxBottleneckTransformer` — Pretrained ONNX encoder
   - `ECFPGenerator` — Extended connectivity fingerprints
   - `RDKITGenerator` — RDKit descriptors
 - **model_search.py** — Nested cross-validation model search with HyperOpt
-- **stacking_util.py** — Model serialization (save/load `.pt` files), `merge_model()` for multi-property models
+- **stacking_util.py** — Hyperopt helpers, search option retrieval, `ModelAndParams` / `ResultDesigner` utility classes
 
 Key pattern: Models are saved as `.pt` files containing the full ensemble. Multi-property models can be merged to eliminate encoder duplication.
 
@@ -100,11 +100,13 @@ See `MolAgent-Marketplace/MolAgentLight/CLAUDE.md` for detailed plugin architect
 
 ### MCP Server
 
-The MCP server (`mcp/server.py`) exposes 12 tools: `list_options`, `start_training_session`, `answer_training_question`, `train_and_visualize`, `list_models`, `predict`, `merge_models`, `delete_model`, `upload_dataset`, `list_datasets`, `delete_dataset`, `admin_manage`. It runs via stdio when used as a Claude Code plugin (no auth), or via streamable-http for remote access (token auth required). See `mcp/MCP_SERVER.md` for the full API.
+The MCP server (`mcp/server.py`) exposes 13 tools: `list_options`, `start_training_session`, `answer_training_question`, `train_and_visualize`, `list_models`, `predict`, `merge_models`, `delete_model`, `download_model`, `upload_dataset`, `list_datasets`, `delete_dataset`, `admin_manage`. It runs via stdio when used as a Claude Code plugin (no auth), or via streamable-http for remote access (token auth required). See `mcp/MCP_SERVER.md` for the full API.
 
 **Authentication:** When `MOLAGENT_AUTH_REQUIRED=true`, the MCP server validates Bearer tokens. Admin tokens can manage users and see all models/datasets; user tokens can only access their own. Tokens are stored as **SHA-256 hashes** in `${MOLAGENT_OUTPUT_ROOT}/auth_tokens.json` — the plaintext is shown only once, at creation, and cannot be recovered. On first run the admin token is auto-generated, printed to stderr, **and** written to a `0600` sidecar file `${MOLAGENT_OUTPUT_ROOT}/admin_token.txt` (so it's recoverable even when stderr is swallowed by a parent process). Copy it and delete the file. If lost, delete `auth_tokens.json` and restart to regenerate (this also wipes all user tokens). Over remote (streamable-http) the token is verified by the transport; over stdio, the web app passes a caller token via `MOLAGENT_CALLER_TOKEN` (with `MOLAGENT_AUTH_REQUIRED=true`) to run under a real per-user identity ("local + token" mode).
 
 **Data Registry:** Uploaded datasets are tracked in `${MOLAGENT_OUTPUT_ROOT}/data_registry.json` with per-user isolation. Files are stored at `uploads/<owner_id>/<filename>`. The `upload_dataset` tool accepts base64-encoded CSV content (works in remote mode without shared filesystem). Both `start_training_session` and `predict` accept `dataset_id` as an alternative to direct file paths. A `last_used` timestamp is maintained on both model and dataset registry entries.
+
+**Remote Upload (Claude Code CLI):** When the MCP is remote, do NOT pass `file_content_b64` through the tool call directly — base64 of files >30KB will be truncated by LLM I/O limits. The train-pipeline skill includes an in-process upload snippet (`uv run --with fastmcp python -c "..."`) that keeps base64 in Python memory and POSTs via `fastmcp.Client`. See `mcp/MCP_SERVER.md` or the train-pipeline SKILL.md for the full snippet.
 
 **Admin Cleanup:** `admin_manage(action="purge_stale", max_age_days=N)` removes models/datasets not used within N days. `admin_manage(action="purge_orphans", max_age_days=N)` removes run folders not referenced by any registry entry (e.g. failed training runs). Both dry-run by default; pass `force=True` to execute deletion.
 
@@ -146,7 +148,7 @@ Admin token is printed on first run. Manage users with the admin CLI:
 ```bash
 uv run mcp/admin_cli.py --url http://127.0.0.1:8001/mcp --token <ADMIN_TOKEN> create-user alice
 uv run mcp/admin_cli.py --url http://127.0.0.1:8001/mcp --token <ADMIN_TOKEN> list-users
-uv run mcp/admin_cli.py --url http://127.0.0.1:8001/mcp --token <ADMIN_TOKEN> revoke <USER_TOKEN>
+uv run mcp/admin_cli.py --url http://127.0.0.1:8001/mcp --token <ADMIN_TOKEN> revoke <OWNER_ID>
 uv run mcp/admin_cli.py --url http://127.0.0.1:8001/mcp --token <ADMIN_TOKEN> purge-stale --days 30
 uv run mcp/admin_cli.py --url http://127.0.0.1:8001/mcp --token <ADMIN_TOKEN> purge-stale --days 30 --force
 uv run mcp/admin_cli.py --url http://127.0.0.1:8001/mcp --token <ADMIN_TOKEN> purge-orphans --days 7
