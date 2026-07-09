@@ -113,10 +113,39 @@ After installing the plugin, three natural-language skills are available:
 | `predict` | "predict using the Caco2 model" | Auto-discover models from registry, run inference on SMILES |
 | `visualize` | "visualize the Caco2 run" | Generate an interactive Plotly dashboard from evaluation results |
 
-Example:
+### Talking to the MCP directly
+ 
+The plugin's skills are thin guides over an MCP server (`mcp/server.py`, 13 tools — see `mcp/MCP_SERVER.md`). You don't need to invoke a skill by name; plain requests to Claude Code work too, since Claude maps your sentences to the underlying tool calls (`start_training_session`, `answer_training_question`, `train_and_visualize`, `predict`, `merge_models`, etc.). Some real examples:
+ 
 ```
-Train a model for /path/to/molecules.csv using cheap computational load
+> Train a model for data.csv to predict logD
 ```
+Claude detects the SMILES column, task type, and defaults, then asks you to confirm or change anything before training.
+ 
+```
+> Use classification with a threshold of 3.5, and set the computational load to moderate
+```
+Claude maps this to `task="Classification"`, `class_values=[3.5]` (values above 3.5 → class 1, at/below → class 0), and `computational_load="moderate"`.
+ 
+```
+> Only use rdkit features, drop the Bottleneck encoder, and use an 80/20 split
+```
+Maps to `feature_keys=["rdkit"]` and `test_size=0.2`.
+ 
+```
+> Looks good, go ahead
+```
+Confirms the config and kicks off `train_and_visualize`.
+ 
+```
+> Predict logD for CCO and c1ccccc1 using the model we just trained
+```
+Claude resolves the model ID from the recent run and calls `predict`.
+ 
+```
+> Combine the solubility and logD models into one model
+```
+Calls `merge_models` with both model IDs.
 
 ### Computational load presets
 
