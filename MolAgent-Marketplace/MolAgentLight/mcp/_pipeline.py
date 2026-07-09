@@ -183,10 +183,24 @@ async def run_full_pipeline(
             for nc in config.nb_classes:
                 prepare_args += ["--nb-classes", str(nc)]
         if config.class_values:
+            # class_values may arrive as a nested list (one inner list per property)
+            # or as a flat list; flatten to individual float tokens for the CLI.
+            flat_cv = []
             for cv in config.class_values:
+                if isinstance(cv, list):
+                    flat_cv.extend(cv)
+                else:
+                    flat_cv.append(cv)
+            for cv in flat_cv:
                 prepare_args += ["--class-values", str(cv)]
         if config.class_quantiles:
+            flat_cq = []
             for cq in config.class_quantiles:
+                if isinstance(cq, list):
+                    flat_cq.extend(cq)
+                else:
+                    flat_cq.append(cq)
+            for cq in flat_cq:
                 prepare_args += ["--class-quantiles", str(cq)]
     if config.blender_properties:
         for bp in config.blender_properties:

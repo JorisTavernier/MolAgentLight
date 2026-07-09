@@ -671,42 +671,42 @@ result = await client.call_tool("predict", {
 ---
 
 ## Skill Resource
- 
+
 The server exposes an MCP **skill resource** at `skill://automol-pipeline/SKILL.md`. Any MCP client that supports resources can read this to get a complete orchestration guide — when to call each tool, how to present results to the user, and how to handle blender properties.
- 
+
 Clients can also read `skill://automol-pipeline/_manifest` for a JSON listing of all files in the skill directory.
- 
+
 ### Accessing skills via the FastMCP SDK
- 
+
 Use `fastmcp.utilities.skills` to discover and download skills from any running server:
- 
+
 ```python
 import asyncio
 from fastmcp import Client
 from fastmcp.client.transports import StreamableHttpTransport
 from fastmcp.utilities.skills import list_skills, get_skill_manifest, download_skill
- 
+
 async def main():
-    t = StreamableHttpTransport("<server-url>", headers={"Authorization": "Bearer <token>"})
+    t = StreamableHttpTransport("http://127.0.0.1:8001/mcp", headers={"Authorization": "Bearer <token>"})
     async with Client(t) as client:
         # List available skills
         skills = await list_skills(client)
         for skill in skills:
             print(f"{skill.name}: {skill.description}")
             # skill.uri → "skill://automol-pipeline/SKILL.md"
- 
+
         # Inspect a skill's file manifest (name, size, sha256 hash)
         manifest = await get_skill_manifest(client, "automol-pipeline")
         print(manifest)
-        # SkillManifest(name='automol-pipeline', files=[SkillFile(path='SKILL.md', size=..., hash='sha256:...')])
- 
+        # SkillManifest(name='automol-pipeline', files=[SkillFile(path='SKILL.md', size=18031, hash='sha256:...')])
+
         # Download all skill files to a local directory
         await download_skill(client, "automol-pipeline", target_dir="./skills/automol-pipeline")
- 
+
 asyncio.run(main())
 ```
 
-
+---
 
 ## Testing
 

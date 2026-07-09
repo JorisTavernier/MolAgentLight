@@ -957,6 +957,12 @@ async def train_and_visualize(config: dict, ctx: Context, progress: Progress = P
     if not csv_path.exists():
         raise McpError(ErrorData(code=INTERNAL_ERROR, message=f"CSV file not found: {csv_file_val}"))
 
+    # output_folder is an arbitrary filesystem path written to by the pipeline —
+    # gate it the same way csv_file/smiles_file/model_file are gated, so a
+    # non-admin remote caller cannot direct writes outside their sandbox.
+    if training_config.output_folder is not None:
+        _ensure_path_access(caller, what="output_folder")
+
     total_steps = 8
     owner = caller.get("owner_id") if caller["user_id"] != LOCAL_USER_ID else None
 
@@ -1403,12 +1409,16 @@ async def merge_models(
                 message=f"Model file not found on disk: {mf}",
             ))
 
-    # Determine output path
+    # Determine output path. output_name is sanitized with Path(...).name (same
+    # treatment as upload_dataset's filename) so it cannot escape output_root
+    # via '..' segments or an absolute path.
     output_root = _output_root()
     from datetime import datetime
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     suffix = "reg" if "regression" in task_type else "clf"
-    merged_name = output_name or f"merged_{timestamp}"
+    merged_name = Path(output_name).name if output_name else f"merged_{timestamp}"
+    if not merged_name or merged_name in (".", ".."):
+        raise McpError(ErrorData(code=INTERNAL_ERROR, message=f"Invalid output_name: {output_name}"))
     merged_folder = output_root / f"merged-{merged_name}"
     merged_folder.mkdir(parents=True, exist_ok=True)
     output_file = merged_folder / f"merged_stacking{suffix}model.pt"
