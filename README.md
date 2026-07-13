@@ -326,10 +326,11 @@ For long training runs, set these in `~/.claude/settings.json` under `"env"`:
   "env": {
     "MCP_TIMEOUT": "1800000",
     "MCP_TOOL_TIMEOUT": "172800000"
+    "CLAUDE_CODE_MCP_IDLE_TOOL_TIMEOUT": "172800000"
   }
 }
 ```
 
-`MCP_TIMEOUT=1800000` (30 min) covers slow first-time `uv` dependency resolution. `MCP_TOOL_TIMEOUT=172800000` (48 hr) covers `expensive` computational load training.
+`MCP_TIMEOUT=1800000` (30 min) covers slow first-time `uv` dependency resolution. `MCP_TOOL_TIMEOUT=172800000` (48 hr) and `CLAUDE_CODE_MCP_IDLE_TOOL_TIMEOUT=172800000` (48 hr) covers `expensive` computational load training.
 
 Full contract in `MolAgent-Marketplace/MolAgentLight/CLAUDE.md`.
