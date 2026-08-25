@@ -26,7 +26,6 @@ def isolate_env(tmp_path, monkeypatch):
     """Point output root at tmp_path for each test."""
     monkeypatch.setenv("MOLAGENT_OUTPUT_ROOT", str(tmp_path))
     monkeypatch.delenv("MOLAGENT_AUTH_REQUIRED", raising=False)
-    monkeypatch.delenv("PHARMAOS_MOLAGENT_ROOT", raising=False)
     monkeypatch.delenv("MOLAGENT_REGISTRY_PATH", raising=False)
 
 

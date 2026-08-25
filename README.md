@@ -2,6 +2,26 @@
 
 MolAgent is an end-to-end ML pipeline for molecular property prediction from SMILES data. It uses ensemble stacking models with pretrained molecular encoders and ships as a **Claude Code plugin**, an **MCP server**, and a **browser-based web app**.
 
+### Update August 25, 2026 — New encoders (breaking default change)
+
+> **Breaking:** `Bottleneck` now refers to the **ChEMBL 37 E-logD** encoder, previously it was ChEMBL 27. Existing `.pt` model files are unaffected (each pickles its own encoder), but `model_registry.json` entries predating this change that carry `feature_keys: ["Bottleneck"]` now refer to ChEMBL 27, not ChEMBL 37. Disambiguate by `run_date`.
+
+New encoder keys:
+
+| Key | Encoder | Notes |
+|-----|---------|-------|
+| `Bottleneck` | ChEMBL 37 E-logD  | **New default.** Trained with `rtlogd` supervision. Best accuracy for most endpoints. |
+| `Bottleneck_chembl37_base` | ChEMBL 37 E-base | No logD supervision. **Use for logD / logP / lipophilicity targets** to avoid optimistic CV bias. |
+| `Bottleneck_chembl27` | ChEMBL 27 (legacy) | Explicit reference to the old default. Use to reproduce results from pre-August models. |
+
+Other changes in this batch:
+- Merge now **rejects** models where the same feature key (`"Bottleneck"`) resolves to different encoder implementations — prevents silent mixing of ChEMBL 27 and ChEMBL 37 weights.
+- Encoder ONNX assets are now included in the package data via explicit nested globs — fixes `FileNotFoundError` on some installs.
+- MCP timeout defaults (`MCP_TIMEOUT`, `MCP_TOOL_TIMEOUT`, `CLAUDE_CODE_MCP_IDLE_TOOL_TIMEOUT`) are now baked into the SessionStart hook automatically.
+- Fixed nested `class_values`/`class_quantiles` serialization in the prepare CLI.
+
+---
+
 ### Update June 12, 2026
 
 Previously MolAgent only had Claude Code skills (LLM-driven orchestration). This version adds a deterministic pipeline layer and a full web interface:
@@ -67,7 +87,7 @@ export PATH="$HOME/AppData/Roaming/Python/PythonXX/Scripts:$PATH"
 ```
 If behind a firewall:
 ```bash
-export UV_NATIVE_TLS=true
+export UV_SYSTEM_CERTS=true
 ```
 
 ---
@@ -93,13 +113,12 @@ pip install -e MolAgent-Marketplace/MolAgentLight/AutoMol/automol/
 
 ```bash
 cd MolAgent-Marketplace/MolAgentLight
-uv venv .venv --python 3.12
+uv venv .venv
 source .venv/bin/activate
 uv pip install -e AutoMol/automol/
 uv pip install "fastmcp[tasks]" pandas pydantic
 cd app/frontend && npm install
 ```
-Activating the environment can be different on Windows.
 
 ---
 
@@ -113,39 +132,10 @@ After installing the plugin, three natural-language skills are available:
 | `predict` | "predict using the Caco2 model" | Auto-discover models from registry, run inference on SMILES |
 | `visualize` | "visualize the Caco2 run" | Generate an interactive Plotly dashboard from evaluation results |
 
-### Talking to the MCP directly
- 
-The plugin's skills are thin guides over an MCP server (`mcp/server.py`, 13 tools — see `mcp/MCP_SERVER.md`). You don't need to invoke a skill by name; plain requests to Claude Code work too, since Claude maps your sentences to the underlying tool calls (`start_training_session`, `answer_training_question`, `train_and_visualize`, `predict`, `merge_models`, etc.). Some real examples:
- 
+Example:
 ```
-> Train a model for data.csv to predict logD
+Train a model for /path/to/molecules.csv using cheap computational load
 ```
-Claude detects the SMILES column, task type, and defaults, then asks you to confirm or change anything before training.
- 
-```
-> Use classification with a threshold of 3.5, and set the computational load to moderate
-```
-Claude maps this to `task="Classification"`, `class_values=[3.5]` (values above 3.5 → class 1, at/below → class 0), and `computational_load="moderate"`.
- 
-```
-> Only use rdkit features, drop the Bottleneck encoder, and use an 80/20 split
-```
-Maps to `feature_keys=["rdkit"]` and `test_size=0.2`.
- 
-```
-> Looks good, go ahead
-```
-Confirms the config and kicks off `train_and_visualize`.
- 
-```
-> Predict logD for CCO and c1ccccc1 using the model we just trained
-```
-Claude resolves the model ID from the recent run and calls `predict`.
- 
-```
-> Combine the solubility and logD models into one model
-```
-Calls `merge_models` with both model IDs.
 
 ### Computational load presets
 
@@ -219,6 +209,7 @@ No manual start needed; Claude Code spawns it via the plugin manifest.
 
 ```bash
 cd MolAgent-Marketplace/MolAgentLight
+source .venv/bin/activate
 MOLAGENT_OUTPUT_ROOT=/absolute/path/to/output \
 MOLAGENT_AUTH_REQUIRED=true \
 uv run mcp/server.py --transport streamable-http --host 127.0.0.1 --port 8001
@@ -315,22 +306,10 @@ The global `MolagentFiles/model_registry.json` indexes all runs and is the sourc
 | `AUTOMOL_VENV` | Virtual environment path | `MolAgentLight/.venv` |
 | `MOLAGENT_AUTH_REQUIRED` | Enable token auth on MCP server | off |
 | `MOLAGENT_DETERMINISTIC` | Seed RNGs, force serial CV | off |
-| `PHARMAOS_MOLAGENT_ROOT` | Nexus per-project output root (overrides `MOLAGENT_OUTPUT_ROOT`) | — |
-| `MCP_TIMEOUT` | Max time (ms) for MCP server to start/connect | `120000` |
-| `MCP_TOOL_TIMEOUT` | Max time (ms) a single MCP tool call can run | `300000` |
+| `MCP_TIMEOUT` | Max time (ms) for MCP server to start/connect | `1800000` |
+| `MCP_TOOL_TIMEOUT` | Max time (ms) a single MCP tool call can run | `172800000` |
+| `CLAUDE_CODE_MCP_IDLE_TOOL_TIMEOUT` | Max idle time (ms) for an MCP tool call | `172800000` |
 
-For long training runs, set these in `~/.claude/settings.json` under `"env"`:
-
-```json
-{
-  "env": {
-    "MCP_TIMEOUT": "1800000",
-    "MCP_TOOL_TIMEOUT": "172800000"
-    "CLAUDE_CODE_MCP_IDLE_TOOL_TIMEOUT": "172800000"
-  }
-}
-```
-
-`MCP_TIMEOUT=1800000` (30 min) covers slow first-time `uv` dependency resolution. `MCP_TOOL_TIMEOUT=172800000` (48 hr) and `CLAUDE_CODE_MCP_IDLE_TOOL_TIMEOUT=172800000` (48 hr) covers `expensive` computational load training.
+The SessionStart hook writes these timeout defaults into `.claude/settings.local.json` automatically. `MCP_TIMEOUT=1800000` (30 min) covers slow first-time `uv` dependency resolution. `MCP_TOOL_TIMEOUT=172800000` and `CLAUDE_CODE_MCP_IDLE_TOOL_TIMEOUT=172800000` (48 hr each) cover `expensive` computational load training.
 
 Full contract in `MolAgent-Marketplace/MolAgentLight/CLAUDE.md`.

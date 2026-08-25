@@ -17,7 +17,7 @@ from automol.stacking_methodarchive import ClassifierArchive, ReducedimArchive, 
 from .stat_util import plot_reg_model
 from .model_search import NestedCVModelSearch, NestedCVSingleModelSearch, NestedCVBaseStackingSearch, NestedCVSingleStackSearch, ClassificationFinder, RegressionFinder
 from .grid_parameters import make_grid_parm, make_hyperopt_grid_parm, make_stacking_grid_parm, make_hyperopt_stacking_grid_parm
-from .feature_generators import OnnxBottleneckTransformer as _OnnxBottleneckTransformer, ECFPGenerator, retrieve_default_offline_generators
+from .feature_generators import OnnxBottleneckTransformer as _OnnxBottleneckTransformer, ECFPGenerator, retrieve_default_offline_generators, default_encoder
 from .clustering import ClusteringAlgorithm, MurckoScaffoldClustering, ButinaSplitReassigned, HierarchicalButina, KmeansForSmiles
 from .data_formation import SingleLigand, PairedLigands, get_nb_feature_multiplier
 
@@ -391,9 +391,13 @@ class BottleneckFeatureGenerator:  # Removed nn.Module inheritance - no longer n
         Returns: 
             numpy matrix with the features
         """
-        if not hasattr(self,'bottleneck'): 
+        # Legacy path: only reached by objects that never ran the constructor's
+        # setup (models pickled before feature_generators existed). Those were
+        # trained on the ChEMBL 27 encoder, so it must stay ChEMBL 27 here —
+        # do NOT switch this to default_encoder().
+        if not hasattr(self,'bottleneck'):
             self.bottleneck=BottleneckTransformer(model='CHEMBL')
-                
+
         return self.bottleneck.generate(smiles)
     
     def is_FeatureGenerationRegressor(self):
@@ -469,14 +473,14 @@ class FeatureGenerationRegressor(BottleneckFeatureGenerator):
         self.compute_SD=compute_SD
         if feature_generators is None:
             if not hasattr(self,'bottleneck'):
-                self.bottleneck=BottleneckTransformer(model='CHEMBL')
+                self.bottleneck=default_encoder()
                 self.feature_generators=retrieve_default_offline_generators(model='CHEMBL', radius=2, nbits=2048)
 
         else:
             self.feature_generators=feature_generators
             if 'Bottleneck' not in feature_generators:
-                if not hasattr(self,'bottleneck'): 
-                    self.bottleneck=bottleneck=BottleneckTransformer(model='CHEMBL')
+                if not hasattr(self,'bottleneck'):
+                    self.bottleneck=default_encoder()
                 self.feature_generators['Bottleneck']=self.bottleneck
         self.outer_jobs=outer_jobs
         self.verbose=verbose
@@ -1097,7 +1101,7 @@ class FeatureGenerationRegressor(BottleneckFeatureGenerator):
         else:
             allprops=[props]
         if smiles is not None:
-            if isinstance(smiles, (list, tuple, np.ndarray, pd.Series,pd.api.extensions.ExtensionArray)):
+            if isinstance(smiles, (list, tuple, np.ndarray,pd.Series)):
                 #if len(smiles)>0:
                 #    smiles=[smi for smi in smiles if len(smi)>0 ]
                 if len(smiles)<1:
@@ -1109,7 +1113,8 @@ class FeatureGenerationRegressor(BottleneckFeatureGenerator):
             seq_len= max([len(s) if s is not None else 0 for s in smiles]) +5
         seq_len= min(seq_len,220)
         
-        #for older models
+        #for older models — trained on the ChEMBL 27 encoder, so this fallback
+        #must stay ChEMBL 27. Do NOT switch to default_encoder().
         if not hasattr(self,'feature_generators'):
             if not hasattr(self,'bottleneck'):   
                 self.bottleneck=BottleneckTransformer(model='CHEMBL')
@@ -1381,6 +1386,20 @@ class FeatureGenerationRegressor(BottleneckFeatureGenerator):
         for key,method in other_model.feature_generators.items():
             if key not in self.feature_generators:
                 self.feature_generators[key]=method
+            else:
+                mine = getattr(self.feature_generators[key], 'generator_name', None)
+                theirs = getattr(method, 'generator_name', None)
+                if mine != theirs:
+                    raise ValueError(
+                        f"Cannot merge: feature key '{key}' resolves to a different encoder in "
+                        f"each model ('{mine}' vs '{theirs}'). Because properties are resolved "
+                        f"by key name, merging would score one model's properties using the "
+                        f"other model's generator. Common causes: (1) merging a model trained "
+                        f"before the 'Bottleneck' key was repointed to the ChEMBL 37 encoder "
+                        f"with one trained after; (2) models built under different RDKit versions "
+                        f"(generator names embed the RDKit version). Retrain the older model, or "
+                        f"merge only models built with the same generators."
+                    )
         
         for p in other_props:
                 if p in other_model.tasksfeatures_parameters:

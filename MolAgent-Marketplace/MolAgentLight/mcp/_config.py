@@ -26,7 +26,11 @@ class TrainingConfig(BaseModel):
     )
     feature_keys: list[str] = Field(
         default=["Bottleneck"],
-        description="Feature generators to use (Bottleneck, rdkit, fps_2048_2, ...)",
+        description=(
+            "Feature generators to use. Encoders: Bottleneck (default, ChEMBL 37 "
+            "E-logD), Bottleneck_chembl37_base (no logD supervision), "
+            "Bottleneck_chembl27 (legacy). Plus rdkit, fps_2048_2, ..."
+        ),
     )
 
     # Regression transforms

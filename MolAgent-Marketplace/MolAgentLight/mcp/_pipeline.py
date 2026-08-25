@@ -36,10 +36,7 @@ def _visualize_script() -> Path:
 
 
 def _output_root() -> Path:
-    root = (
-        os.environ.get("PHARMAOS_MOLAGENT_ROOT")
-        or os.environ.get("MOLAGENT_OUTPUT_ROOT")
-    )
+    root = os.environ.get("MOLAGENT_OUTPUT_ROOT")
     # Always resolve to an absolute path so subprocesses launched from any CWD
     # see the same location.
     return (Path(root) if root else _plugin_root() / "MolagentFiles").resolve()
@@ -66,7 +63,15 @@ def _run_script_sync(script: Path, args: list[str], cwd: Optional[Path] = None) 
         text=True,
         stdin=subprocess.DEVNULL,
         cwd=str(cwd or scripts_dir),
-        env={**os.environ, "VIRTUAL_ENV": str(_venv_path()), "PYTHONPATH": str(scripts_dir)},
+        env={
+            **os.environ,
+            "VIRTUAL_ENV": str(_venv_path()),
+            "PYTHONPATH": str(scripts_dir),
+            # Always inject an absolute, resolved output root so PEP 723 scripts
+            # (which ignore --active/--no-sync and may run with a different CWD)
+            # write to the same location the MCP server reads from.
+            "MOLAGENT_OUTPUT_ROOT": str(_output_root()),
+        },
     )
     if result.returncode != 0:
         raise RuntimeError(

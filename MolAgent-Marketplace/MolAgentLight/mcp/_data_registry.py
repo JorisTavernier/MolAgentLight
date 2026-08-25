@@ -98,10 +98,7 @@ def touch_registry_entry(registry_path: Path, entry_id: str) -> bool:
 
 
 def _data_registry_output_root() -> Path:
-    root = (
-        os.environ.get("PHARMAOS_MOLAGENT_ROOT")
-        or os.environ.get("MOLAGENT_OUTPUT_ROOT")
-    )
+    root = os.environ.get("MOLAGENT_OUTPUT_ROOT")
     if root:
         return Path(root).resolve()
     plugin_root = os.environ.get("MOLAGENT_PLUGIN_ROOT")

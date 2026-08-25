@@ -42,10 +42,7 @@ ADMIN_USER_ID = "__admin__"
 
 def _auth_output_root() -> Path:
     """Resolve output root without importing _pipeline (avoids circular deps)."""
-    root = (
-        os.environ.get("PHARMAOS_MOLAGENT_ROOT")
-        or os.environ.get("MOLAGENT_OUTPUT_ROOT")
-    )
+    root = os.environ.get("MOLAGENT_OUTPUT_ROOT")
     if root:
         return Path(root).resolve()
     plugin_root = os.environ.get("MOLAGENT_PLUGIN_ROOT")

@@ -2,6 +2,13 @@
 
 Claude Code plugin marketplace for [MolAgent](https://github.com/JorisTavernier/MolAgentLight) — automated molecular property prediction.
 
+## Highlights
+
+- **Three Bottleneck encoder keys** — `Bottleneck` (ChEMBL 37 E-logD, default), `Bottleneck_chembl37_base` (no logD supervision — use for logD/logP targets to avoid CV bias), `Bottleneck_chembl27` (legacy). See [Encoder Reference](#encoder-reference) below.
+- **Remote MCP server with authentication** — deploy the server centrally; users connect with Bearer tokens via `claude mcp add --transport http`. Multi-user with per-user model/dataset isolation.
+- **Dataset upload registry** — upload CSVs once (`upload_dataset`) and reference by `dataset_id` in training and prediction. Tracks `last_used`; admin cleanup removes stale data.
+- **Browser web app** — SvelteKit frontend + FastAPI backend for the full pipeline without Claude Code. See `MolAgentLight/app/`.
+
 ## Available Plugins
 
 | Plugin | Description | Version |
@@ -111,6 +118,18 @@ See [MolAgentLight README](MolAgentLight/README.md) for full documentation on:
 - Computational load presets (free, cheap, moderate, expensive)
 - Model merging for multi-property predictions
 - Environment variables and configuration
+
+## Encoder Reference
+
+Three Bottleneck ONNX encoders are available as `feature_keys`:
+
+| Key | Encoder | When to use |
+|-----|---------|-------------|
+| `Bottleneck` | ChEMBL 37 E-logD (v6_best) | **Default.** Best general accuracy for most endpoints (permeability, activity, toxicity, etc.). |
+| `Bottleneck_chembl37_base` | ChEMBL 37 E-base (no logD) | Use when the target **is** logD, logP, or lipophilicity — avoids optimistic CV bias from logD supervision. |
+| `Bottleneck_chembl27` | ChEMBL 27 legacy | Use only to reproduce results from models trained before the ChEMBL 37 upgrade. |
+
+You can also combine with `rdkit` (RDKit 2D descriptors) or `fps_2048_2` (Morgan fingerprints, radius 2).
 
 ## Maintenance
 

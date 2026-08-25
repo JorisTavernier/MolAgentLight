@@ -160,15 +160,14 @@ When training multiple properties, per-property `.pt` files each contain the ful
 
 ## Environment Variables
 
-The plugin honors a layered env-var contract — Nexus values take precedence over user values, which take precedence over defaults.
+The plugin honors an env-var contract — user values take precedence over defaults.
 
 | Variable | Source | Purpose |
 |----------|--------|---------|
 | `CLAUDE_PLUGIN_ROOT` | Claude Code | Set when loaded as a plugin. The hook reads this. |
 | `AUTOMOL_ROOT` | SessionStart hook | Project / repo root (`CLAUDE_PROJECT_DIR` or `$PWD`). |
 | `MOLAGENT_PLUGIN_ROOT` | SessionStart hook → `.claude/settings.local.json` | Plugin root directory (where `skills/` lives). Available in all Bash calls and subagents. Takes effect on next session start. |
-| `MOLAGENT_OUTPUT_ROOT` | SessionStart hook → `.claude/settings.local.json` | Where pipeline output and the model registry live. Default: `$AUTOMOL_ROOT/MolagentFiles`. Override-aware: if `PHARMAOS_MOLAGENT_ROOT` is set (Nexus), that wins. |
-| `PHARMAOS_MOLAGENT_ROOT` | Nexus host (per-project) | Nexus injects this so each project gets its own output namespace. Honored automatically by the hook. |
+| `MOLAGENT_OUTPUT_ROOT` | SessionStart hook → `.claude/settings.local.json` | Where pipeline output and the model registry live. Default: `$AUTOMOL_ROOT/MolagentFiles`. |
 | `MOLAGENT_REGISTRY_PATH` | User | Full path override for `model_registry.json`. Defaults to `${MOLAGENT_OUTPUT_ROOT}/model_registry.json`. |
 | `MOLAGENT_DETERMINISTIC` | User | Opt-in. When `true` (also `1/yes/on`): seeds `random` / `numpy` / `torch`, sets `PYTHONHASHSEED`, forces all `n_jobs` to 1. Reproducible but slower (no parallel CV). Default off. |
 | `MOLAGENT_LOG_DIR` | User | Where the Stop-hook validator log goes (default: `$TMPDIR/molagent`). The legacy plugin-cache path is read-only when installed via `/plugin install`. |
@@ -177,9 +176,8 @@ The plugin honors a layered env-var contract — Nexus values take precedence ov
 **Output-root resolution priority** (used by every Python script):
 
 ```
-1. PHARMAOS_MOLAGENT_ROOT (Nexus)
-2. MOLAGENT_OUTPUT_ROOT (user / hook-defaulted)
-3. ./MolagentFiles
+1. MOLAGENT_OUTPUT_ROOT (user / hook-defaulted)
+2. ./MolagentFiles
 ```
 
 All this is encapsulated in `skills/train-pipeline/scripts/_paths.py::get_output_root()`. The `_determinism.py` sibling provides `maybe_seed_everything()` and `force_serial_jobs()`.
@@ -189,6 +187,34 @@ All this is encapsulated in `skills/train-pipeline/scripts/_paths.py::get_output
 The MCP server (`mcp/server.py`) wraps the pipeline as 13 tools callable from any MCP client. It uses `_pipeline.py::run_full_pipeline()` for the training orchestration. The server reports progress at each step via `ctx.report_progress(progress=step, total=8, message=label)`.
 
 Tools: `list_options`, `start_training_session`, `answer_training_question`, `train_and_visualize`, `list_models`, `predict`, `merge_models`, `delete_model`, `download_model`, `upload_dataset`, `list_datasets`, `delete_dataset`, `admin_manage`. Full docs in `mcp/MCP_SERVER.md`.
+
+### Encoders
+
+Three ONNX encoders, all 250-dim, registered in
+`automol.feature_generators.retrieve_default_offline_generators()`:
+
+| Key | Export | Notes |
+|---|---|---|
+| `Bottleneck` | `encoders/e_logd/` | Default. v6_best / E-logD, ChEMBL 37, epoch 39. Trained with `rtlogd`. |
+| `Bottleneck_chembl37_logd` | — | Alias of `Bottleneck`; shares the instance. Accepted as input, not listed. |
+| `Bottleneck_chembl37_base` | `encoders/e_base/` | E-base, ChEMBL 37, epoch 39. No logD supervision — use for logD/logP/lipophilicity and for embedding-driven work. |
+| `Bottleneck_chembl27` | `bottleneck_encoder.onnx` | Legacy incumbent. |
+
+`Bottleneck` was repointed from the ChEMBL 27 encoder to v6, so every existing
+default (`_config.py`, `server.py`, train scripts, web app, `clustering_method`)
+picks up v6 with no edit. Consequence: `feature_keys: ["Bottleneck"]` in
+`model_registry.json` entries predating this change refers to the ChEMBL 27
+encoder. Predictions are unaffected — each `.pt` pickles its own generator — but
+provenance by string alone is ambiguous, disambiguated by run date.
+
+Two fallbacks in `stacking.py` that build a *fresh* model use `default_encoder()`
+(v6). Two others are legacy-model paths and deliberately keep ChEMBL 27, because
+those models were trained on it — see the comments there before changing them.
+
+Encoder assets live in non-package subdirectories, so
+`[tool.setuptools.package-data]` needs explicit nested globs
+(`encoders/*/*.onnx`, `encoders/*/*.json`). Without them the wheel silently omits
+them and `MolBottleGenerator` raises `FileNotFoundError`.
 
 ### Data Registry
 

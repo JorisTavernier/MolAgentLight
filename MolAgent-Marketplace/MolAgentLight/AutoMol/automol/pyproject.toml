@@ -101,7 +101,12 @@ include = ["automol*"]
 exclude = ["tests*", "docs*", "build*"]
 
 [tool.setuptools.package-data]
-"automol" = ["*.jpg", "*.html", "*.csv", "*.json", "*.onnx", "*.onnx.data"]
+"automol" = [
+    "*.jpg", "*.html", "*.csv", "*.json", "*.onnx", "*.onnx.data",
+    # Encoder exports live in non-package subdirectories, so they need
+    # explicit nested globs — the flat "*.onnx" pattern does not match them.
+    "encoders/*/*.json", "encoders/*/*.onnx",
+]
 "automol.pdf_template" = ["*.jpg", "*.html", "*.csv"]
 
 # Development tools configuration

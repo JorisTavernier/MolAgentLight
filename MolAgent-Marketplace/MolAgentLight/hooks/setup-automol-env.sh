@@ -4,13 +4,11 @@
 # Exports:
 #   AUTOMOL_ROOT          — repo / project root (CLAUDE_PROJECT_DIR or PWD)
 #   MOLAGENT_PLUGIN_ROOT  — plugin root (CLAUDE_PLUGIN_ROOT, or local fallback)
-#   MOLAGENT_OUTPUT_ROOT  — output directory (defaults to $AUTOMOL_ROOT/MolagentFiles
-#                           but honors PHARMAOS_MOLAGENT_ROOT when injected by Nexus)
+#   MOLAGENT_OUTPUT_ROOT  — output directory (defaults to $AUTOMOL_ROOT/MolagentFiles)
 #
 # Works in BOTH modes:
 #   - Plugin mode: /plugin install MolAgentLight (uses CLAUDE_PLUGIN_ROOT)
 #   - Standalone mode: cd MolAgentLight && claude (uses CLAUDE_PROJECT_DIR or PWD)
-#   - Nexus mode: drug_discovery_ui injects PHARMAOS_MOLAGENT_ROOT per-project
 
 set -u
 
@@ -29,10 +27,8 @@ else
   MOLAGENT_PLUGIN_ROOT="$AUTOMOL_ROOT"
 fi
 
-# Output root: PHARMAOS_MOLAGENT_ROOT (Nexus) > MOLAGENT_OUTPUT_ROOT (user) > default
-if [ -n "${PHARMAOS_MOLAGENT_ROOT:-}" ]; then
-  MOLAGENT_OUTPUT_ROOT="$PHARMAOS_MOLAGENT_ROOT"
-elif [ -n "${MOLAGENT_OUTPUT_ROOT:-}" ]; then
+# Output root: MOLAGENT_OUTPUT_ROOT (user) > default
+if [ -n "${MOLAGENT_OUTPUT_ROOT:-}" ]; then
   : # already set by user
 else
   MOLAGENT_OUTPUT_ROOT="$AUTOMOL_ROOT/MolagentFiles"
@@ -138,6 +134,9 @@ try:
     s['env']['AUTOMOL_ROOT'] = os.environ['_AUTOMOL_ROOT']
     s['env']['MOLAGENT_OUTPUT_ROOT'] = os.environ['_MOLAGENT_OUTPUT_ROOT']
     s['env']['AUTOMOL_VENV'] = os.environ['_VENV_DIR']
+    s['env'].setdefault('MCP_TIMEOUT', '1800000')
+    s['env'].setdefault('MCP_TOOL_TIMEOUT', '172800000')
+    s['env'].setdefault('CLAUDE_CODE_MCP_IDLE_TOOL_TIMEOUT', '172800000')
 
     tmp_fd, tmp = tempfile.mkstemp(prefix='.settings-', suffix='.json.tmp', dir=sf_dir)
     with os.fdopen(tmp_fd, 'w') as f:

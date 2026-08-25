@@ -29,8 +29,7 @@ def _find_venv_python(plugin_root: Path) -> Path:
 class Settings(BaseSettings):
     plugin_root: Path = _find_plugin_root()
     output_root: Path = Path(
-        os.environ.get("PHARMAOS_MOLAGENT_ROOT")
-        or os.environ.get("MOLAGENT_OUTPUT_ROOT")
+        os.environ.get("MOLAGENT_OUTPUT_ROOT")
         or str(_find_plugin_root() / "MolagentFiles")
     )
     venv_python: Path = _find_venv_python(_find_plugin_root())

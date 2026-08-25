@@ -9,6 +9,9 @@ All rights reserved, Open Analytics NV, 2021-2025.
 
 # from .model import *  # Removed: model.py no longer exists (PyTorch dependency removed)
 
+import json
+import re
+
 import pandas as pd
 
 import numpy as np
@@ -22,20 +25,83 @@ from rdkit.ML.Descriptors import MoleculeDescriptors
 from importlib_resources import files
 
 
+#: Canonical encoder feature keys, in listing order. ``Bottleneck`` is the default.
+CANONICAL_ENCODER_KEYS = (
+    "Bottleneck",
+    "Bottleneck_chembl37_base",
+    "Bottleneck_chembl27",
+)
+
+#: Extra keys accepted as input that resolve to a canonical key. Aliases share
+#: the canonical key's instance, so they cost no additional ONNX session.
+FEATURE_KEY_ALIASES = {
+    "Bottleneck_chembl37_logd": "Bottleneck",
+}
+
+
+def _package_relative(path):
+    """Return ``path`` relative to the automol package dir, or None if outside it."""
+    if path is None:
+        return None
+    base = Path(os.path.dirname(os.path.realpath(__file__)))
+    try:
+        return Path(path).resolve().relative_to(base).as_posix()
+    except (ValueError, OSError):
+        return None
+
+
+def _resolve_package_path(rel, absolute):
+    """Prefer the package-relative location; fall back to the stored absolute path.
+
+    Lets a model trained under one install path load under another, while
+    keeping older pickles that recorded only an absolute path working.
+    """
+    if rel is not None:
+        candidate = Path(os.path.dirname(os.path.realpath(__file__))) / rel
+        if candidate.exists():
+            return str(candidate)
+    return absolute
+
+
+def default_encoder():
+    """Return a fresh instance of the default encoder (v6_best, E-logD, ChEMBL 37)."""
+    base_dir = os.path.dirname(os.path.realpath(__file__))
+    return MolBottleGenerator(
+        export_dir=os.path.join(base_dir, "encoders", "e_logd"),
+        variant="e_logd",
+    )
+
+
 def retrieve_default_offline_generators(model='CHEMBL', radius=2, nbits=2048):
     """
     Function that returns a dictionary of default internal feature generators.
-    
+
+    ``Bottleneck`` is the default encoder: v6_best (E-logD, full ChEMBL 37,
+    epoch 39). ``Bottleneck_chembl37_base`` is E-base — the only encoder in the
+    set without logD supervision, and therefore the one to use for logD, logP
+    and lipophilicity endpoints. ``Bottleneck_chembl27`` is the legacy incumbent.
+
     Args:
         model: string that to define which kind of Deeplearning generated features. Reflects the smiles used for training the encoder.
         radius: radius of ecfp generation
         nbits: size of the ecfp features
     """
+    base_dir = os.path.dirname(os.path.realpath(__file__))
 
-    return {'Bottleneck':OnnxBottleneckTransformer(),
-            'rdkit':RDKITGenerator(),
-            f'fps_{nbits}_{radius}':ECFPGenerator(radius=radius, nBits =nbits)
-           }
+    logd = default_encoder()
+    generators = {
+        'Bottleneck': logd,
+        'Bottleneck_chembl37_base': MolBottleGenerator(
+            export_dir=os.path.join(base_dir, "encoders", "e_base"),
+            variant="e_base",
+        ),
+        'Bottleneck_chembl27': OnnxBottleneckTransformer(),
+        'rdkit': RDKITGenerator(),
+        f'fps_{nbits}_{radius}': ECFPGenerator(radius=radius, nBits=nbits),
+    }
+    for alias, canonical in FEATURE_KEY_ALIASES.items():
+        generators[alias] = generators[canonical]
+    return generators
 
 ###############################
 class FeatureGenerator():
@@ -645,6 +711,7 @@ class OnnxBottleneckTransformer(FeatureGenerator):
         state['session'] = None
         state['input_name'] = None
         state['output_name'] = None
+        state['_model_path_rel'] = _package_relative(self.model_path)
         return state
 
     def __setstate__(self, state):
@@ -660,6 +727,141 @@ class OnnxBottleneckTransformer(FeatureGenerator):
                 "ONNX Runtime is required for inference. "
                 "Install with: pip install onnxruntime"
             )
+        self.model_path = _resolve_package_path(state.get('_model_path_rel'), state['model_path'])
         self.session = ort.InferenceSession(self.model_path, providers=['CPUExecutionProvider'])
         self.input_name = self.session.get_inputs()[0].name
         self.output_name = self.session.get_outputs()[0].name
+
+
+###############################
+# MolBottle tokenization — verbatim from molbottle.data.tokenizer.SMILES_PATTERN so
+# this class stays self-contained (no molbottle install required in the consumer).
+_MOLBOTTLE_SMILES_PATTERN = (
+    r"(\[[^\]]+]|Br?|Cl?|Al|As|Ag|Au|Be|Ba|Bi|Ca|Cu|Fe|Kr|He|Li|Mg|Mn|Na|Ni"
+    r"|Ra|Rb|Si|si|se|Se|Sr|Te|te|Xe|Zn|>>|N|O|S|P|F|I|b|c|n|o|s|p|\(|\)|\."
+    r"|=|#|-|\+|\\\\|\\|/|:|~|@|\?|>|\*|\$|%[0-9]{2}|[0-9])"
+)
+_MOLBOTTLE_RX = re.compile(_MOLBOTTLE_SMILES_PATTERN)
+
+
+class MolBottleGenerator(FeatureGenerator):
+    """Feature generator backed by a MolBottle ONNX encoder export.
+
+    Reads ``config.json`` / ``vocab.json`` / ``encoder.onnx`` from ``export_dir``,
+    defaulting to ``encoders/e_base`` next to this file. ``variant`` labels the
+    generated feature names and defaults to the export directory's name, so
+    different exports never collide even at the same training epoch.
+
+    The encoder produces 250-dimensional float32 embeddings.  SMILES that
+    cannot be tokenized or exceed ``max_len=220`` tokens are zero-filled and
+    a warning is raised with the count — rows stay aligned with the input list.
+
+    Requires: ``onnxruntime`` (``pip install onnxruntime``).
+    """
+
+    def __init__(
+        self,
+        export_dir: Optional[str] = None,
+        batch_size: int = 100,
+        variant: Optional[str] = None,
+    ):
+        super().__init__()
+
+        try:
+            import onnxruntime as ort
+        except ImportError:
+            raise ImportError(
+                "onnxruntime is required for MolBottleGenerator. "
+                "Install with: pip install onnxruntime"
+            )
+
+        base_dir = os.path.dirname(os.path.realpath(__file__))
+        d = Path(export_dir) if export_dir is not None else Path(base_dir) / "encoders" / "e_base"
+
+        cfg_path   = d / "config.json"
+        vocab_path = d / "vocab.json"
+        onnx_path  = d / "encoder.onnx"
+
+        for p in (cfg_path, vocab_path, onnx_path):
+            if not p.exists():
+                raise FileNotFoundError(f"MolBottleGenerator: {p} not found")
+
+        cfg = json.loads(cfg_path.read_text())
+        tok_list: list = json.loads(vocab_path.read_text())["tok_list"]
+
+        self._tok2int  = {t: i for i, t in enumerate(tok_list)}
+        self._pad      = cfg["pad_index"]
+        self._unk      = self._tok2int["<unk>"]
+        self._sos      = self._tok2int["<sos>"]
+        self._eos      = self._tok2int["<eos>"]
+        self._max_len  = cfg["max_len"]
+        self._onnx_path = str(onnx_path)
+        self.batch_size = batch_size
+
+        self._sess = ort.InferenceSession(self._onnx_path, providers=["CPUExecutionProvider"])
+        self._out_name = self._sess.get_outputs()[0].name
+
+        self.nb_features = cfg["out_dim"]
+        epoch = cfg.get("source_epoch", "?")
+        self.variant = variant if variant is not None else d.name
+        self.names = [f"MolBottle_{i}_of_{self.nb_features}_{self.variant}_ep{epoch}"
+                      for i in range(self.nb_features)]
+        self.generator_name = f"automol_molbottle_{self.variant}_ep{epoch}"
+
+    def _encode_one(self, smile: str) -> Optional[list]:
+        """Tokenise one SMILES → padded int list, or None if unencodable."""
+        if not isinstance(smile, str) or not smile:
+            return None
+        toks = _MOLBOTTLE_RX.findall(smile)
+        if "".join(toks) != smile:
+            return None
+        seq = ([self._sos]
+               + [self._tok2int.get(t, self._unk) for t in toks]
+               + [self._eos])
+        if len(seq) > self._max_len:
+            return None
+        return seq + [self._pad] * (self._max_len - len(seq))
+
+    def generate(self, smiles) -> np.ndarray:
+        """Return ``(n, 250)`` float32 embeddings aligned with the input list."""
+        import warnings
+        if hasattr(smiles, "tolist"):
+            smiles = smiles.tolist()
+        if isinstance(smiles, str):
+            smiles = [smiles]
+
+        X = np.zeros((len(smiles), self.nb_features), dtype=np.float32)
+        rows = [(i, seq) for i, s in enumerate(smiles)
+                if (seq := self._encode_one(s)) is not None]
+        if len(rows) < len(smiles):
+            warnings.warn(
+                f"MolBottleGenerator: {len(smiles) - len(rows)} of {len(smiles)} "
+                f"SMILES unparseable or exceeded max_len={self._max_len}; zero-filled"
+            )
+        for start in range(0, len(rows), self.batch_size):
+            chunk = rows[start:start + self.batch_size]
+            ids = np.array([seq for _, seq in chunk], dtype=np.int64)
+            z = self._sess.run(
+                [self._out_name],
+                {"src": ids, "src_pad_mask": ids == self._pad},
+            )[0]
+            X[[i for i, _ in chunk]] = z
+        X[~np.isfinite(X)] = 0.0
+        return X
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["_sess"] = None
+        state["_out_name"] = None
+        state["_onnx_rel"] = _package_relative(self._onnx_path)
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        import onnxruntime as ort
+        self._onnx_path = _resolve_package_path(state.get("_onnx_rel"), state["_onnx_path"])
+        self._sess = ort.InferenceSession(self._onnx_path, providers=["CPUExecutionProvider"])
+        self._out_name = self._sess.get_outputs()[0].name
+
+    def __repr__(self) -> str:
+        return f"MolBottleGenerator(nb_features={self.nb_features}, generator='{self.generator_name}')"

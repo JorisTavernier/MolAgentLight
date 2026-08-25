@@ -58,7 +58,6 @@
     "env_contract": {
       "required": [],
       "honored": [
-        "PHARMAOS_MOLAGENT_ROOT",
         "MOLAGENT_OUTPUT_ROOT",
         "MOLAGENT_REGISTRY_PATH",
         "MOLAGENT_DETERMINISTIC",

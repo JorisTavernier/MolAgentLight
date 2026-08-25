@@ -115,7 +115,7 @@
 	</fieldset>
 
 	<fieldset class="section"><legend>Feature Generators</legend>
-		<div class="cg">{#each opts?.feature_keys ?? ['Bottleneck', 'rdkit', 'fps_2048_2'] as feat}<label class="ci"><input type="checkbox" checked={cfg.feature_keys!.includes(feat)} onchange={() => toggleFeature(feat)} />{feat}</label>{/each}</div>
+		<div class="cg">{#each opts?.feature_keys ?? ['Bottleneck', 'Bottleneck_chembl37_base', 'Bottleneck_chembl27', 'rdkit', 'fps_2048_2'] as feat}<label class="ci"><input type="checkbox" checked={cfg.feature_keys!.includes(feat)} onchange={() => toggleFeature(feat)} />{feat}</label>{/each}</div>
 	</fieldset>
 
 	{#if detect?.blender_properties && detect.blender_properties.length > 0}

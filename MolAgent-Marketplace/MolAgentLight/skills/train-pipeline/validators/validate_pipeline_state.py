@@ -16,7 +16,7 @@ Behavior:
     list, not by this hook. This allows the user to abort mid-execution.
 
 Output root resolution:
-  --directory CLI flag > MOLAGENT_OUTPUT_ROOT > PHARMAOS_MOLAGENT_ROOT > MolagentFiles
+  --directory CLI flag > MOLAGENT_OUTPUT_ROOT > MolagentFiles
 
 Log file lives in tempdir (writable in plugin-cache deployments) — the legacy
 ``SCRIPT_DIR`` location was read-only when installed via /plugin install.
@@ -58,11 +58,7 @@ def _resolve_log_path() -> Path:
 
 def _resolve_default_directory() -> str:
     """Default --directory honors env-var output-root resolution."""
-    return (
-        os.environ.get("PHARMAOS_MOLAGENT_ROOT")
-        or os.environ.get("MOLAGENT_OUTPUT_ROOT")
-        or "MolagentFiles"
-    )
+    return os.environ.get("MOLAGENT_OUTPUT_ROOT") or "MolagentFiles"
 
 
 LOG_FILE = _resolve_log_path()

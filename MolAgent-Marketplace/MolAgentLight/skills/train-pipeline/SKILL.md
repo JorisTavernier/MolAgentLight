@@ -108,7 +108,17 @@ Target Summary:
 **Critical domain terms** (present these correctly to users):
 - **RegressionClassification** is binary classification via regression estimators on 0/1 labels (predictions clipped to [0,1] as probabilities). It is NOT "train both regression and classification."
 - **blender_properties** are auxiliary numeric columns used as extra input features alongside molecular representations — they are NOT targets.
-- **feature_keys** are molecular representation methods (Bottleneck encoder, RDKit descriptors, fingerprints) — not CSV column names.
+- **feature_keys** are molecular representation methods — not CSV column names. Encoder table:
+
+  | Key | Notes |
+  |---|---|
+  | `Bottleneck` | Default. ChEMBL 37 E-logD (v6_best), trained with logD supervision. Best general accuracy. |
+  | `Bottleneck_chembl37_base` | ChEMBL 37 E-base, no logD supervision. Use for logD/logP/lipophilicity targets to avoid optimistic CV bias. |
+  | `Bottleneck_chembl27` | Legacy. Use only to reproduce results from old models. |
+  | `rdkit` | ~210 RDKit 2D descriptors. |
+  | `fps_2048_2` | Morgan fingerprints (2048 bits, radius 2). Pattern `fps_{nbits}_{radius}` is dynamic. |
+
+  **logD supervision note:** `Bottleneck` is trained with ChEMBL's `rtlogd` label, so it gives optimistically biased CV scores when the target itself is logD, logP, or lipophilicity. Use `Bottleneck_chembl37_base` for those endpoints. For all others (permeability, toxicity, activity, etc.), `Bottleneck` is the correct default.
 
 ### Step 3: Apply Overrides or Confirm
 

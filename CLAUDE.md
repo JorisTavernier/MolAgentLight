@@ -41,7 +41,7 @@ Replace `PythonXX` with your Python version, e.g. `Python312`.
 If you are behind a corporate firewall or proxy, set native TLS so `uv` uses the system certificate store:
 
 ```bash
-export UV_NATIVE_TLS=true
+export UV_SYSTEM_CERTS=true
 ```
 
 On Windows, the MCP server may time out on first start while `uv` resolves dependencies. Increase `MCP_TIMEOUT` (milliseconds) in `~/.claude/settings.json` (global user settings):
@@ -155,21 +155,22 @@ uv run mcp/admin_cli.py --url http://127.0.0.1:8001/mcp --token <ADMIN_TOKEN> pu
 uv run mcp/admin_cli.py --url http://127.0.0.1:8001/mcp --token <ADMIN_TOKEN> purge-orphans --days 7 --force
 ```
 
+Connect Claude Code to the remote server using a user token (obtained from `create-user`):
+```bash
+claude mcp add --transport http automol-mcp http://127.0.0.1:8001/mcp \
+  --header "Authorization: Bearer <USER_TOKEN>"
+```
+
 ### Installation Without Plugin Hook
 
 If running the MCP server or web app without the Claude Code marketplace (i.e. the SessionStart hook hasn't run):
 
 ```bash
 cd MolAgent-Marketplace/MolAgentLight
-uv venv .venv --python 3.12
-source .venv/bin/activate 
+uv venv .venv
 uv pip install -e AutoMol/automol/
 uv pip install "fastmcp[tasks]" pandas pydantic
 cd app/frontend && npm install
-```
-Note that the activation of the environment can be different, for Windows:
-```bash
-source .venv/Scripts/activate
 ```
 
 See `MolAgent-Marketplace/MolAgentLight/app/README.md` for full details.
@@ -207,7 +208,6 @@ Training scripts accept `--computational-load` with 4 levels:
 |----------|---------|
 | `MOLAGENT_PLUGIN_ROOT` | Plugin root (set by SessionStart hook from `CLAUDE_PLUGIN_ROOT`). |
 | `MOLAGENT_OUTPUT_ROOT` | Where pipeline output and the registry live (default: `./MolagentFiles`). |
-| `PHARMAOS_MOLAGENT_ROOT` | Nexus-injected per-project output root. Wins over `MOLAGENT_OUTPUT_ROOT`. |
 | `MOLAGENT_REGISTRY_PATH` | Override the registry JSON path. Default: `${MOLAGENT_OUTPUT_ROOT}/model_registry.json`. |
 | `MOLAGENT_DETERMINISTIC` | Opt-in. `true` seeds RNGs and forces serial CV. Default off. |
 | `MOLAGENT_LOG_DIR` | Stop-hook validator log directory. Default: `$TMPDIR/molagent`. |
@@ -226,4 +226,3 @@ The plugin declares a `nexus` block in `.claude-plugin/plugin.json` exposing the
 2. Add `'molagent_dashboard'` to the host's playground type registry (e.g., `MOLECULAR_TYPES` in `playgroundTemplates.ts` for `nexus-atrium`).
 3. Restart the host so its bundled-plugin discovery picks up the new manifest.
 
-The host injects `PHARMAOS_MOLAGENT_ROOT` per project; the SessionStart hook already honors it.

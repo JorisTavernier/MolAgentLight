@@ -63,7 +63,7 @@ from _data_registry import (  # noqa: E402
     get_dataset, list_datasets_for_owner, data_registry_path,
     load_json_list, atomic_write_json, _lock_path as _dr_lock_path,
 )
-from _discovery import get_all_options, list_base_estimators, list_blender_estimators, list_dim_reduction_methods, list_feature_generators  # noqa: E402
+from _discovery import get_all_options, list_base_estimators, list_blender_estimators, list_dim_reduction_methods, list_feature_generator_aliases, list_feature_generators  # noqa: E402
 from _pipeline import run_full_pipeline, _plugin_root, _scripts_dir, _venv_path, _output_root, _run_script_sync  # noqa: E402
 from _sanitize import sanitize_model_entry, sanitize_train_result, sanitize_predict_result  # noqa: E402
 
@@ -86,6 +86,11 @@ finally:
 logger = logging.getLogger(__name__)
 
 _AUTH_REQUIRED = os.environ.get("MOLAGENT_AUTH_REQUIRED", "").lower() in ("1", "true", "yes")
+
+
+def _valid_feature_keys() -> set[str]:
+    """Feature keys accepted from callers: canonical listed keys plus aliases."""
+    return (set(list_feature_generators()) | set(list_feature_generator_aliases())) - {"_note"}
 
 
 # ── Auth provider for FastMCP ─────────────────────────────────────────────────
@@ -269,7 +274,8 @@ mcp = FastMCP(
         "DOMAIN TERMS:\n"
         "- blender_properties: auxiliary numeric columns used as extra input features "
         "(not targets)\n"
-        "- feature_keys: molecular representation methods (Bottleneck, rdkit, fps_*), "
+        "- feature_keys: molecular representation methods (Bottleneck, "
+        "Bottleneck_chembl37_base, Bottleneck_chembl27, rdkit, fps_*), "
         "not CSV column names\n"
         "- computational_load: runtime budget "
         "(free ~2min, cheap ~10min, moderate ~1hr, expensive ~24hr)\n\n"
@@ -773,7 +779,7 @@ async def answer_training_question(
     if feature_keys is not None:
         import re
         _fps_pattern = re.compile(r"^fps_\d+_\d+$")
-        valid_features = set(list_feature_generators().keys()) - {"_note"}
+        valid_features = _valid_feature_keys()
         invalid = [k for k in feature_keys if k not in valid_features and not _fps_pattern.match(k)]
         if invalid:
             validation_messages.append(

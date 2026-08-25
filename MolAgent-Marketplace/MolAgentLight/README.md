@@ -34,6 +34,88 @@ claude
 > /predict
 ```
 
+### Remote MCP Server (with authentication)
+
+Start the server with auth enabled:
+```bash
+cd MolAgent-Marketplace/MolAgentLight
+MOLAGENT_OUTPUT_ROOT=/absolute/path/to/output \
+MOLAGENT_AUTH_REQUIRED=true \
+uv run mcp/server.py --transport streamable-http --host 127.0.0.1 --port 8001
+```
+
+Create a user token (admin token is printed on first server start):
+```bash
+uv run mcp/admin_cli.py --url http://127.0.0.1:8001/mcp --token <ADMIN_TOKEN> create-user alice
+```
+
+Add the server to Claude Code with the user token:
+```bash
+claude mcp add --transport http automol-mcp http://127.0.0.1:8001/mcp \
+  --header "Authorization: Bearer <USER_TOKEN>"
+```
+
+Or via `~/.claude/settings.json`:
+```json
+{
+  "mcpServers": {
+    "automol-mcp": {
+      "type": "http",
+      "url": "http://127.0.0.1:8001/mcp",
+      "headers": { "Authorization": "Bearer <USER_TOKEN>" }
+    }
+  }
+}
+```
+
+See `mcp/MCP_SERVER.md` for the full server API and admin reference.
+
+### Talking to the MCP directly
+
+The plugin's skills are thin guides over an MCP server (`mcp/server.py`, 13 tools — see `mcp/MCP_SERVER.md`). You don't need to invoke a skill by name; plain requests to Claude Code work too, since Claude maps your sentences to the underlying tool calls (`start_training_session`, `answer_training_question`, `train_and_visualize`, `predict`, `merge_models`, etc.). Some real examples:
+
+```
+> Train a model for data.csv to predict logD
+```
+Claude detects the SMILES column, task type, and defaults, then asks you to confirm or change anything before training.
+
+```
+> Use classification with a threshold of 3.5, and set the computational load to moderate
+```
+Claude maps this to `task="Classification"`, `class_values=[3.5]` (values above 3.5 → class 1, at/below → class 0), and `computational_load="moderate"`.
+
+```
+> Only use rdkit features, drop the Bottleneck encoder, and use an 80/20 split
+```
+Maps to `feature_keys=["rdkit"]` and `test_size=0.2`.
+
+```
+> Looks good, go ahead
+```
+Confirms the config and kicks off `train_and_visualize`.
+
+```
+> Predict logD for CCO and c1ccccc1 using the model we just trained
+```
+Claude resolves the model ID from the recent run and calls `predict`.
+
+```
+> Combine the solubility and logD models into one model
+```
+Calls `merge_models` with both model IDs.
+
+## Encoder Reference
+
+Three Bottleneck ONNX encoders are available as `feature_keys`. All produce 250-dim embeddings.
+
+| Key | Encoder | Notes |
+|-----|---------|-------|
+| `Bottleneck` | ChEMBL 37 E-logD (v6_best) | **Default.** Trained with logD supervision. Best general accuracy for most endpoints. |
+| `Bottleneck_chembl37_base` | ChEMBL 37 E-base | No logD supervision. **Use for logD, logP, or lipophilicity targets** — avoids optimistic CV bias when the target correlates with the encoder's training signal. |
+| `Bottleneck_chembl27` | ChEMBL 27 (legacy) | Legacy encoder. Use only to reproduce results from models trained before the ChEMBL 37 upgrade. |
+
+You can also combine with `rdkit` (RDKit 2D descriptors) or `fps_2048_2` (Morgan fingerprints, 2048 bits, radius 2).
+
 ## Skills
 
 ### train-pipeline
@@ -45,7 +127,7 @@ Single-invocation training pipeline (plan + execute in one session):
 
 Auto-executes when the user clearly requests training. Saves plan for later if user declines. Re-invoke to resume interrupted runs.
 
-Supports regression, classification, and mixed tasks. Features include Bottleneck (2D) and optionally AffGraph/ProLIF (3D protein-ligand). Computational load is user-selectable: free, cheap, moderate, or expensive.
+Supports regression, classification, and mixed tasks. Features include the Bottleneck 2D encoders — `Bottleneck` (ChEMBL 37 E-logD, default), `Bottleneck_chembl37_base` (no logD supervision; use for logD/logP/lipophilicity), and `Bottleneck_chembl27` (legacy) — plus RDKit descriptors, Morgan fingerprints, and optionally AffGraph/ProLIF (3D protein-ligand). Computational load is user-selectable: free, cheap, moderate, or expensive.
 
 ### predict
 
@@ -79,6 +161,17 @@ The pipeline automatically merges per-property files into a single `.pt` file af
 - Is fully backward compatible — individual per-property files still work
 
 The predict skill handles both merged and individual models transparently.
+
+## Web App
+
+A browser UI is available at `app/` — no Claude Code required. It provides the same train / predict / visualize workflow through a SvelteKit frontend backed by a FastAPI server that proxies to the MCP server.
+
+```bash
+cd MolAgent-Marketplace/MolAgentLight/app
+./start.sh        # starts backend (port 8000) and frontend (port 5173)
+```
+
+Open http://localhost:5173. The backend can connect to the MCP server locally (stdio) or remotely (streamable-http URL + token). See `app/README.md` for configuration.
 
 ## Project Structure
 
