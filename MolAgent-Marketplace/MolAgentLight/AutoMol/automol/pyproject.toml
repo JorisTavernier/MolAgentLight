@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "automol"
-version = "1.0.0"
+version = "2.0.0"
 description = "AutoMol: Automated Machine Learning Pipeline for Drug Discovery"
 # readme will be set at package level
 license = {text = "All rights reserved, Open Analytics NV, 2021-2025"}
