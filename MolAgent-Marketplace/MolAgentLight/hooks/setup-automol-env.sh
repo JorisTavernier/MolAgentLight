@@ -12,15 +12,48 @@
 
 set -u
 
+# Normalize a possibly-Windows path ("C:/x" or "C:\x") to this platform's form.
+# WSL has no Win32 path layer, so bash treats "C:/x" as a RELATIVE directory and
+# silently builds a shadow tree under $PWD. Git Bash/MSYS2 and Cygwin translate
+# drive-letter paths themselves, and native Linux/macOS never see them — on all
+# of those this is a no-op (no wslpath, or no drive letter to match).
+_normalize_path() {
+  case "$1" in
+    [A-Za-z]:[/\\]*)
+      if command -v wslpath >/dev/null 2>&1; then
+        wslpath -u "$1" 2>/dev/null || printf '%s' "$1"
+      else
+        printf '%s' "$1"
+      fi
+      ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
+# Abort rather than create a shadow tree under $PWD from a relative root.
+_require_abs() {
+  case "$2" in
+    /*|[A-Za-z]:[/\\]*) return 0 ;;
+    *)
+      echo "ERROR: $1 is not an absolute path: '$2'" >&2
+      echo "       Refusing to continue — this would create a shadow tree under $PWD." >&2
+      exit 1
+      ;;
+  esac
+}
+
 # 1. Compute roots (always run, not gated on CLAUDE_ENV_FILE)
-if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
-  AUTOMOL_ROOT="$CLAUDE_PROJECT_DIR"
+CLAUDE_PROJECT_DIR_N="$(_normalize_path "${CLAUDE_PROJECT_DIR:-}")"
+CLAUDE_PLUGIN_ROOT_N="$(_normalize_path "${CLAUDE_PLUGIN_ROOT:-}")"
+
+if [ -n "$CLAUDE_PROJECT_DIR_N" ]; then
+  AUTOMOL_ROOT="$CLAUDE_PROJECT_DIR_N"
 else
   AUTOMOL_ROOT="$PWD"
 fi
 
-if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
-  MOLAGENT_PLUGIN_ROOT="$CLAUDE_PLUGIN_ROOT"
+if [ -n "$CLAUDE_PLUGIN_ROOT_N" ]; then
+  MOLAGENT_PLUGIN_ROOT="$CLAUDE_PLUGIN_ROOT_N"
 elif [ -d "$AUTOMOL_ROOT/MolAgent-Marketplace/MolAgentLight/skills" ]; then
   MOLAGENT_PLUGIN_ROOT="$AUTOMOL_ROOT/MolAgent-Marketplace/MolAgentLight"
 else
@@ -29,10 +62,14 @@ fi
 
 # Output root: MOLAGENT_OUTPUT_ROOT (user) > default
 if [ -n "${MOLAGENT_OUTPUT_ROOT:-}" ]; then
-  : # already set by user
+  MOLAGENT_OUTPUT_ROOT="$(_normalize_path "$MOLAGENT_OUTPUT_ROOT")"
 else
   MOLAGENT_OUTPUT_ROOT="$AUTOMOL_ROOT/MolagentFiles"
 fi
+
+_require_abs AUTOMOL_ROOT "$AUTOMOL_ROOT"
+_require_abs MOLAGENT_PLUGIN_ROOT "$MOLAGENT_PLUGIN_ROOT"
+_require_abs MOLAGENT_OUTPUT_ROOT "$MOLAGENT_OUTPUT_ROOT"
 
 # 2. Write to CLAUDE_ENV_FILE if set (existing behavior)
 if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
@@ -44,7 +81,8 @@ if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
 fi
 
 # 3. Venv setup + AutoMol install
-VENV_DIR="${AUTOMOL_VENV:-$MOLAGENT_PLUGIN_ROOT/.venv}"
+VENV_DIR="$(_normalize_path "${AUTOMOL_VENV:-$MOLAGENT_PLUGIN_ROOT/.venv}")"
+_require_abs AUTOMOL_VENV "$VENV_DIR"
 
 if [ ! -d "$VENV_DIR" ]; then
   echo "No virtual environment found at $VENV_DIR. Creating one ..." >&2
@@ -67,8 +105,8 @@ else
 fi
 
 # When running as a marketplace plugin, install from the bundled copy
-if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
-  AUTOMOL_LIB="$CLAUDE_PLUGIN_ROOT/AutoMol/automol"
+if [ -n "$CLAUDE_PLUGIN_ROOT_N" ]; then
+  AUTOMOL_LIB="$CLAUDE_PLUGIN_ROOT_N/AutoMol/automol"
 else
   AUTOMOL_LIB="$AUTOMOL_ROOT/AutoMol/automol"
 fi
