@@ -37,6 +37,8 @@ _TOKEN_STORE_FILENAME = "auth_tokens.json"
 
 LOCAL_USER_ID = "__local__"
 ANONYMOUS_USER_ID = "__anonymous__"
+# Sentinel identities that must never be assigned to a real token.
+RESERVED_USER_IDS = frozenset({LOCAL_USER_ID, ANONYMOUS_USER_ID})
 ADMIN_USER_ID = "__admin__"
 
 
@@ -127,16 +129,13 @@ def _release_lock(fd: int | None, lock_path: Path) -> None:
 def _load_store(store_path: Path) -> dict:
     if not store_path.exists():
         return {"admin_token_hash": None, "users": {}}
-    try:
-        with open(store_path) as f:
-            data = json.load(f)
-        if not isinstance(data, dict):
-            return {"admin_token_hash": None, "users": {}}
-        data.setdefault("admin_token_hash", None)
-        data.setdefault("users", {})
-        return data
-    except (json.JSONDecodeError, OSError):
-        return {"admin_token_hash": None, "users": {}}
+    with open(store_path) as f:
+        data = json.load(f)   # raises json.JSONDecodeError on corruption — do not catch
+    if not isinstance(data, dict):
+        raise ValueError(f"Auth store at {store_path} is not a JSON object")
+    data.setdefault("admin_token_hash", None)
+    data.setdefault("users", {})
+    return data
 
 
 def _save_store(store_path: Path, data: dict) -> None:
@@ -238,7 +237,18 @@ def validate_token(token: str) -> Optional[dict]:
 
 
 def create_user_token(user_id: str) -> str:
-    """Generate and store a new user token. Returns the token string."""
+    """Generate and store a new user token. Returns the token string.
+
+    Rejects the reserved sentinel identities. `_caller_privileges` treats a
+    caller whose user_id equals LOCAL_USER_ID as a full local admin, so minting
+    a token named "__local__" would be a privilege escalation. Enforced here so
+    it holds for every client (web app, admin_cli, Claude Code), not just one
+    HTTP route.
+    """
+    if user_id in RESERVED_USER_IDS:
+        raise ValueError(
+            f"user_id {user_id!r} is reserved and cannot be assigned to a token"
+        )
     store_path = _token_store_path()
     lock = _lock_path(store_path)
     fd = _acquire_lock(lock)

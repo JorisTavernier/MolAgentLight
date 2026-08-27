@@ -12,7 +12,7 @@
       "name": "MolAgentLight",
       "source": "./MolAgentLight",
       "description": "Train and deploy molecular property prediction models from SMILES data using ensemble stacking methods, with interactive Plotly.js dashboards for evaluation results",
-      "version": "1.1.0",
+      "version": "2.0.0",
       "author": { "name": "MolAgent Team" },
       "category": "scientific-computing",
       "tags": ["drug-discovery", "qsar", "machine-learning", "cheminformatics", "visualization", "dashboard"],

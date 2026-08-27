@@ -98,30 +98,16 @@ class MLPClassifierWrapper(BaseEstimator, ClassifierMixin):
     def predict_proba(self, X):
         """
         calls the predict_proba function of the mlpclassifier
-        
+
         Args:
             X: data matrix X
-        
+
         Returns:
             the probabilistic predictions
         """
         check_is_fitted(self.clf)
         X = check_array(X)
         return self.clf.predict_proba(X)
-    
-    def set_params(self, **parameters):
-        """
-        sets the parameters
-        
-        Args:
-            parameters: the parameter dictionary
-        
-        Returns:
-            self
-        """
-        for parameter, value in parameters.items():
-            setattr(self, parameter, value)
-        return self
 
 class MLPRegressorWrapper(BaseEstimator, RegressorMixin):
     """
@@ -191,27 +177,13 @@ class MLPRegressorWrapper(BaseEstimator, RegressorMixin):
     def predict(self, X):
         """
         call the predict function of the MLPRegressor
-        
+
         Args:
             X: data matrix X
-        
+
         Returns:
             the predictions
         """
         check_is_fitted(self.reg)
         X = check_array(X)
         return self.reg.predict(X)
-    
-    def set_params(self, **parameters):
-        """
-        sets the parameters
-        
-        Args:
-            parameters: the parameter dictionary
-        
-        Returns:
-            self
-        """
-        for parameter, value in parameters.items():
-            setattr(self, parameter, value)
-        return self

@@ -282,7 +282,7 @@ def mixed_validation(df_orig,properties,stacked_model=None,standard_smiles_colum
     #stratified validation
     train,test= train_test_split( df, test_size=(test_cnt-len(validation_indices)-len(lgo_indices))/len(df_orig) , stratify=df['stratify'].values,random_state =random_state)
     all_validation=np.sort(list(test['index'].values)+list(validation_indices)+list(lgo_indices))
-    validation=df_orig.iloc[all_validation,:]
+    validation=df_orig.loc[all_validation,:]
     indices_map={val:index for index,val in enumerate(validation['index'])}
     train=df_orig.drop(index=all_validation)
     mapped_lgo_indices=[indices_map[val] for val in lgo_indices]
@@ -378,7 +378,7 @@ def leave_grp_out_validation(df,properties,stacked_model=None,standard_smiles_co
             break
     
     validation_indices=np.sort(validation_indices)
-    validation=df.iloc[validation_indices,:]
+    validation=df.loc[validation_indices,:]
     train=df
     train=train.drop(index=validation_indices)
     if plot_silhouette: 

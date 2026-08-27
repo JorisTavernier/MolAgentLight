@@ -387,6 +387,12 @@ Uploaded datasets are tracked in `${MOLAGENT_OUTPUT_ROOT}/data_registry.json`. E
 
 > **Claude Code CLI users:** Do NOT pass `file_content_b64` through the MCP tool call directly — base64 of files >30KB will be truncated by LLM I/O limits. Instead, use the in-process upload snippet that keeps base64 in Python memory:
 >
+> Retrieve the URL and token first:
+> ```bash
+> claude mcp get <server-name>   # prints URL and Authorization header
+> ```
+>
+> Then upload:
 > ```bash
 > uv run --with fastmcp python -c "
 > import asyncio,base64,json,sys,os

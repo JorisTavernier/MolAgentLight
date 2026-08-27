@@ -118,6 +118,7 @@ export interface MCPSettingsResponse {
 	server_path: string | null;
 	has_auth: boolean;
 	output_folder: string | null;
+	warnings?: string[];
 }
 
 export interface MCPSettingsUpdate {

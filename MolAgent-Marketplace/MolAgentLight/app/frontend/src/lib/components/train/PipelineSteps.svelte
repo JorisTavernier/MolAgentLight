@@ -37,21 +37,22 @@
 	let logs = $state<string[]>([]);
 	let error = $state<string | null>(null);
 	let dashboardHtml = $state<string | null>(null);
-	let interval: ReturnType<typeof setInterval>;
 
 	$effect(() => {
 		if (!pipeline.jobId) return;
 		status = 'running';
-		interval = setInterval(async () => {
+		let errorCount = 0;
+		const id = setInterval(async () => {
 			try {
 				const jobStatus = await getJobStatus(pipeline.jobId!);
+				errorCount = 0;
 				status = jobStatus.status;
 				progress = jobStatus.progress;
 				progressTotal = jobStatus.progress_total || 8;
 				progressLabel = jobStatus.progress_label;
 
 				if (jobStatus.status === 'success' || jobStatus.status === 'failed') {
-					clearInterval(interval);
+					clearInterval(id);
 					if (jobStatus.status === 'success') {
 						pipeline.result = jobStatus.result as TrainingResult;
 						pipeline.step = 'done';
@@ -65,10 +66,15 @@
 					}
 				}
 			} catch {
-				// keep polling
+				errorCount++;
+				if (errorCount >= 20) {
+					clearInterval(id);
+					status = 'failed';
+					error = 'Polling stopped after repeated errors — is the backend running?';
+				}
 			}
 		}, 2000);
-		return () => clearInterval(interval);
+		return () => clearInterval(id);
 	});
 
 	const metrics = $derived(pipeline.result?.metrics ?? {});
@@ -137,7 +143,7 @@
 	{#if dashboardHtml}
 		<div class="dashboard-frame">
 			<h4>Dashboard</h4>
-			<iframe srcdoc={dashboardHtml} sandbox="allow-scripts allow-same-origin" title="Dashboard"></iframe>
+			<iframe srcdoc={dashboardHtml} sandbox="allow-scripts" title="Dashboard"></iframe>
 		</div>
 	{/if}
 

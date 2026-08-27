@@ -4,21 +4,21 @@ MolAgent is an end-to-end ML pipeline for molecular property prediction from SMI
 
 ### Update August 25, 2026 — New encoders (breaking default change)
 
-> **Breaking:** `Bottleneck` now refers to the **ChEMBL 37 E-logD** encoder, previously it was ChEMBL 27. Existing `.pt` model files are unaffected (each pickles its own encoder), but `model_registry.json` entries predating this change that carry `feature_keys: ["Bottleneck"]` now refer to ChEMBL 27, not ChEMBL 37. Disambiguate by `run_date`.
+> **Breaking:** `Bottleneck` now refers to the **ChEMBL 37 E-logD** encoder, previously it was ChEMBL 27. Existing `.pt` model files are unaffected (each pickles its own encoder), but `model_registry.json` entries predating this change that carry `feature_keys: ["Bottleneck"]` now refer to ChEMBL 27. Disambiguate by `run_date`.
 
 New encoder keys:
 
 | Key | Encoder | Notes |
 |-----|---------|-------|
-| `Bottleneck` | ChEMBL 37 E-logD  | **New default.** Trained with `rtlogd` supervision. Best accuracy for most endpoints. |
+| `Bottleneck` | ChEMBL 37 E-logD | **New default.** Trained with `rtlogd` supervision. Best accuracy for most endpoints. |
 | `Bottleneck_chembl37_base` | ChEMBL 37 E-base | No logD supervision. **Use for logD / logP / lipophilicity targets** to avoid optimistic CV bias. |
-| `Bottleneck_chembl27` | ChEMBL 27 (legacy) | Explicit reference to the old default. Use to reproduce results from pre-August models. |
+| `Bottleneck_chembl27` | ChEMBL 27 (legacy) | Explicit reference to the old default. Use to reproduce results from pre-August models. Trained with LogD supervision|
 
 Other changes in this batch:
-- Merge now **rejects** models where the same feature key (`"Bottleneck"`) resolves to different encoder implementations — prevents silent mixing of ChEMBL 27 and ChEMBL 37 weights.
+- Merge now **rejects** models where the same feature key (`"Bottleneck"`) resolves to different encoder implementations — prevents silent mixing of ChEMBL 27 and v6 weights.
+- `MolBottleGenerator` feature names are now variant-aware (e.g. `Bottleneck_chembl37_base_0`, `Bottleneck_0`) so merged models with multiple encoder variants produce distinct column names.
 - Encoder ONNX assets are now included in the package data via explicit nested globs — fixes `FileNotFoundError` on some installs.
 - MCP timeout defaults (`MCP_TIMEOUT`, `MCP_TOOL_TIMEOUT`, `CLAUDE_CODE_MCP_IDLE_TOOL_TIMEOUT`) are now baked into the SessionStart hook automatically.
-- Fixed nested `class_values`/`class_quantiles` serialization in the prepare CLI.
 
 ---
 
@@ -87,7 +87,7 @@ export PATH="$HOME/AppData/Roaming/Python/PythonXX/Scripts:$PATH"
 ```
 If behind a firewall:
 ```bash
-export UV_SYSTEM_CERTS=true
+export UV_NATIVE_TLS=true
 ```
 
 ---

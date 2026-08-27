@@ -24,7 +24,11 @@ class AdminManageRequest(BaseModel):
 
 @router.post("/manage")
 async def admin_manage(req: AdminManageRequest):
-    """Proxy to MCP admin_manage tool. Uses the configured MCP auth token."""
+    """Proxy to MCP admin_manage tool. Uses the configured MCP auth token.
+
+    Reserved user_ids are rejected by the MCP server (create_user_token), not
+    here — duplicating that list would let the two copies drift apart.
+    """
     args = req.model_dump(exclude_none=True)
     try:
         result = await call_tool("admin_manage", args)

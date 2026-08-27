@@ -13,28 +13,34 @@
 
 	let logs = $state<string[]>([]);
 	let status = $state<string>('pending');
-	let interval: ReturnType<typeof setInterval> | undefined;
 
 	$effect(() => {
 		if (!jobId) return;
 		status = 'running';
-		interval = setInterval(async () => {
+		let errorCount = 0;
+		const id = setInterval(async () => {
 			try {
 				const [jobStatus, jobLogs] = await Promise.all([
 					getJobStatus(jobId),
 					getJobLogs(jobId),
 				]);
+				errorCount = 0;
 				status = jobStatus.status;
 				logs = jobLogs.lines;
 				if (jobStatus.status === 'success' || jobStatus.status === 'failed') {
-					clearInterval(interval);
+					clearInterval(id);
 					onDone(jobStatus);
 				}
 			} catch {
-				// keep polling
+				errorCount++;
+				if (errorCount >= 20) {
+					clearInterval(id);
+					status = 'failed';
+					logs = [...logs, 'Polling stopped after repeated errors'];
+				}
 			}
 		}, 1500);
-		return () => clearInterval(interval);
+		return () => clearInterval(id);
 	});
 </script>
 

@@ -268,7 +268,7 @@ class HyperoptSearch(ParamSearch):
             changed_estimator=clone(estimator)
             changed_estimator.set_params(**par)
             if self.fit_params is not None and isinstance(changed_estimator, Pipeline):
-                cv_score = cross_val_score(changed_estimator, X_train, y_train,scoring=scoring,cv=cv,fit_params=self.fit_params,n_jobs=self.cross_val_jobs)
+                cv_score = cross_val_score(changed_estimator, X_train, y_train,scoring=scoring,cv=cv,params=self.fit_params,n_jobs=self.cross_val_jobs)
             else:
                 cv_score = cross_val_score(changed_estimator, X_train, y_train,scoring=scoring,cv=cv,n_jobs=self.cross_val_jobs)
             return {'loss': -cv_score.mean(), 'status': STATUS_OK, 'cv_score': cv_score}

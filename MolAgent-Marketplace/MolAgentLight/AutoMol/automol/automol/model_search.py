@@ -339,7 +339,7 @@ class NestedCVSingleModelSearch(NestedCVModelSearch):
         if self.verbose > 1: print(params_grid[0])
 
         #search parameters and get best estimator
-        paramsearch.search(estimator,params_grid[0], scoring=scoring,cv=cv,X_train=X, y_train=y, random_state=random_state)
+        paramsearch.search(estimator,params_grid[0], scoring=scoring,cv=outer_group_kfold,X_train=X, y_train=y, random_state=random_state)
         if paramsearch.fit_params is not None and isinstance(paramsearch.get_best_estimator(), Pipeline):
             est=clone(paramsearch.get_best_estimator()).fit(X, y,**paramsearch.fit_params)
         else:
@@ -889,12 +889,12 @@ class ClassificationFinder(ModelFinder):
                 if y_proba.shape[1]>2:
                     out['test_auc'].append(roc_auc_score(y_test[:,i], y_proba,multi_class='ovo'))
                 else:
-                    out['test_auc'].append(roc_auc_score(y_test[:,i]==1, y_proba[:,1]))
+                    out['test_auc'].append(roc_auc_score(y_test[:,i]==est.classes_[1], y_proba[:,1]))
         else:
             if y_pred_proba.shape[1]>2:
                 out['test_auc'].append(roc_auc_score(y_test, y_pred_proba,multi_class='ovo'))
             else:
-                out['test_auc'].append(roc_auc_score(y_test==1, y_pred_proba[:,1]))
+                out['test_auc'].append(roc_auc_score(y_test==est.classes_[1], y_pred_proba[:,1]))
         return out
     
     def is_classifier(self):

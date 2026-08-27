@@ -699,8 +699,26 @@ function esc(v) {
 }
 
 // ───────────────────────── Theme handling ─────────────────────────
+// localStorage throws (SecurityError) when this document has an opaque origin,
+// which is the case inside `sandbox="allow-scripts"` iframes — how both the web
+// app and Nexus embed this dashboard. Theme persistence is cosmetic, so never
+// let it abort the script: without it we fall back to prefers-color-scheme.
+function readStoredTheme() {
+  try {
+    return localStorage.getItem('molagent-theme');
+  } catch (e) {
+    return null;
+  }
+}
+function storeTheme(t) {
+  try {
+    localStorage.setItem('molagent-theme', t);
+  } catch (e) {
+    /* not persisted (sandboxed / storage disabled) — harmless */
+  }
+}
 function detectInitialTheme() {
-  const explicit = localStorage.getItem('molagent-theme');
+  const explicit = readStoredTheme();
   if (explicit) return explicit;
   if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)
     return 'jarvis';
@@ -708,7 +726,7 @@ function detectInitialTheme() {
 }
 function applyTheme(t) {
   document.documentElement.setAttribute('data-theme', t);
-  localStorage.setItem('molagent-theme', t);
+  storeTheme(t);
   if (state.data) renderAll();  // re-skin Plotly with theme colors
 }
 applyTheme(detectInitialTheme());

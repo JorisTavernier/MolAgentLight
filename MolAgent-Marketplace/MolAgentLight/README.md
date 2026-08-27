@@ -110,7 +110,7 @@ Three Bottleneck ONNX encoders are available as `feature_keys`. All produce 250-
 
 | Key | Encoder | Notes |
 |-----|---------|-------|
-| `Bottleneck` | ChEMBL 37 E-logD (v6_best) | **Default.** Trained with logD supervision. Best general accuracy for most endpoints. |
+| `Bottleneck` | ChEMBL 37 E-logD | **Default.** Trained with logD supervision. Best general accuracy for most endpoints. |
 | `Bottleneck_chembl37_base` | ChEMBL 37 E-base | No logD supervision. **Use for logD, logP, or lipophilicity targets** — avoids optimistic CV bias when the target correlates with the encoder's training signal. |
 | `Bottleneck_chembl27` | ChEMBL 27 (legacy) | Legacy encoder. Use only to reproduce results from models trained before the ChEMBL 37 upgrade. |
 

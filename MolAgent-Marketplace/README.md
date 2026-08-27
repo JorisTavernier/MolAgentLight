@@ -13,7 +13,7 @@ Claude Code plugin marketplace for [MolAgent](https://github.com/JorisTavernier/
 
 | Plugin | Description | Version |
 |--------|-------------|---------|
-| **MolAgentLight** | Train and deploy molecular property prediction models from SMILES data using ensemble stacking methods, with interactive Plotly.js dashboards for evaluation results | 1.0.0 |
+| **MolAgentLight** | Train and deploy molecular property prediction models from SMILES data using ensemble stacking methods, with interactive Plotly.js dashboards for evaluation results | 2.0.0 |
 
 ## Installation
 
@@ -125,7 +125,7 @@ Three Bottleneck ONNX encoders are available as `feature_keys`:
 
 | Key | Encoder | When to use |
 |-----|---------|-------------|
-| `Bottleneck` | ChEMBL 37 E-logD (v6_best) | **Default.** Best general accuracy for most endpoints (permeability, activity, toxicity, etc.). |
+| `Bottleneck` | ChEMBL 37 E-logD | **Default.** Best general accuracy for most endpoints (permeability, activity, toxicity, etc.). |
 | `Bottleneck_chembl37_base` | ChEMBL 37 E-base (no logD) | Use when the target **is** logD, logP, or lipophilicity — avoids optimistic CV bias from logD supervision. |
 | `Bottleneck_chembl27` | ChEMBL 27 legacy | Use only to reproduce results from models trained before the ChEMBL 37 upgrade. |
 

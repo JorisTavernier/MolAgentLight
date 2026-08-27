@@ -73,7 +73,12 @@
 	<h3>Output</h3>
 	<div class="ff">
 		<label>Output folder (local path for downloaded models and dashboards)</label>
-		<input type="text" bind:value={outputFolder} placeholder="C:\Users\...\output" />
+		<input type="text" bind:value={outputFolder} placeholder="/mnt/c/Users/.../output" />
+		{#if settings?.warnings?.length}
+			{#each settings.warnings as w}
+				<p class="warn">{w}</p>
+			{/each}
+		{/if}
 	</div>
 
 	<div class="actions">
@@ -95,6 +100,16 @@
 	.ff input:focus { outline: none; border-color: var(--accent); }
 	.actions { display: flex; align-items: center; gap: 12px; justify-content: flex-end; }
 	.msg { font-size: 12px; color: var(--accent); }
+	.warn {
+		margin: 6px 0 0;
+		padding: 8px 10px;
+		font-size: 12px;
+		line-height: 1.45;
+		color: var(--text-primary);
+		background: color-mix(in srgb, var(--warning, #d4a056) 12%, transparent);
+		border-left: 3px solid var(--warning, #d4a056);
+		border-radius: 4px;
+	}
 	.btn-save { padding: 6px 16px; border: none; border-radius: 6px; background: var(--accent); color: white; font-size: 13px; font-weight: 600; cursor: pointer; }
 	.btn-save:hover { background: var(--accent-hover); }
 	.btn-save:disabled { opacity: 0.5; cursor: not-allowed; }

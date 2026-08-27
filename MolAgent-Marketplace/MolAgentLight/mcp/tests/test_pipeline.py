@@ -23,6 +23,16 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from _config import TrainingConfig, TrainingResult
 from _pipeline import run_full_pipeline, _scripts_dir
 
+
+@pytest.fixture(autouse=True)
+def _output_root_to_tmp(tmp_path, monkeypatch):
+    """Point MOLAGENT_OUTPUT_ROOT at tmp_path.
+
+    These tests pass output_folder under tmp_path; the path-containment guard
+    (_under_output_root) rejects anything outside the configured output root.
+    """
+    monkeypatch.setenv("MOLAGENT_OUTPUT_ROOT", str(tmp_path))
+
 # ── Synthetic data ─────────────────────────────────────────────────────────────
 
 SYNTHETIC_SMILES = [

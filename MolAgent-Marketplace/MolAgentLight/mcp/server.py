@@ -64,7 +64,7 @@ from _data_registry import (  # noqa: E402
     load_json_list, atomic_write_json, _lock_path as _dr_lock_path,
 )
 from _discovery import get_all_options, list_base_estimators, list_blender_estimators, list_dim_reduction_methods, list_feature_generator_aliases, list_feature_generators  # noqa: E402
-from _pipeline import run_full_pipeline, _plugin_root, _scripts_dir, _venv_path, _output_root, _run_script_sync  # noqa: E402
+from _pipeline import run_full_pipeline, _plugin_root, _scripts_dir, _venv_path, _output_root, _run_script_sync, _under_output_root, _active_run_folders  # noqa: E402
 from _sanitize import sanitize_model_entry, sanitize_train_result, sanitize_predict_result  # noqa: E402
 
 # Warm all discovery caches at startup (before event loop starts).
@@ -240,8 +240,10 @@ def _delete_model_entry_files(entry: dict, errors: list[str] | None = None) -> i
     run_folder = entry.get("run_folder")
     if run_folder and Path(run_folder).exists():
         try:
-            shutil.rmtree(run_folder)
+            shutil.rmtree(_under_output_root(Path(run_folder)))
             removed += 1
+        except ValueError:
+            _note(f"Skipped run_folder outside output root: {run_folder}")
         except OSError as exc:
             _note(f"Failed to delete {run_folder}: {exc}")
         return removed
@@ -250,7 +252,10 @@ def _delete_model_entry_files(entry: dict, errors: list[str] | None = None) -> i
     if isinstance(model_files, str):
         model_files = [model_files]
     for mf in model_files:
-        p = Path(mf)
+        try:
+            p = _under_output_root(Path(mf))
+        except ValueError:
+            continue   # skip files outside the output root
         if p.exists():
             try:
                 p.unlink()
@@ -1641,6 +1646,7 @@ async def download_model(model_id: str, ctx: Context) -> dict:
         raise McpError(ErrorData(code=INTERNAL_ERROR, message="Invalid model_file in registry."))
 
     try:
+        model_path = _under_output_root(model_path)
         model_bytes = model_path.read_bytes()
     except OSError:
         raise McpError(ErrorData(code=INTERNAL_ERROR, message=f"Model file not found: {model_path}"))
@@ -1881,7 +1887,10 @@ async def admin_manage(
                 code=INTERNAL_ERROR,
                 message="user_id is required for create_token action.",
             ))
-        token = create_user_token(user_id)
+        try:
+            token = create_user_token(user_id)
+        except ValueError as exc:
+            raise McpError(ErrorData(code=INTERNAL_ERROR, message=str(exc)))
         return {"status": "created", "user_id": user_id, "token": token}
 
     elif action == "revoke_user":
@@ -1918,10 +1927,10 @@ async def admin_manage(
         return {"status": "ok", "users": users}
 
     elif action == "purge_stale":
-        if max_age_days is None:
+        if max_age_days is None or max_age_days < 1:
             raise McpError(ErrorData(
                 code=INTERNAL_ERROR,
-                message="max_age_days is required for purge_stale action.",
+                message="max_age_days must be >= 1 for purge_stale action.",
             ))
 
         from datetime import datetime, timedelta
@@ -2014,10 +2023,10 @@ async def admin_manage(
         }
 
     elif action == "purge_orphans":
-        if max_age_days is None:
+        if max_age_days is None or max_age_days < 1:
             raise McpError(ErrorData(
                 code=INTERNAL_ERROR,
-                message="max_age_days is required for purge_orphans action.",
+                message="max_age_days must be >= 1 for purge_orphans action.",
             ))
 
         cutoff_ts = time.time() - max_age_days * 86400
@@ -2058,7 +2067,9 @@ async def admin_manage(
         errors = []
         for folder in orphans:
             try:
-                shutil.rmtree(folder)
+                if str(folder.resolve()) in _active_run_folders:
+                    continue   # pipeline is actively writing to this folder
+                shutil.rmtree(_under_output_root(folder))
                 purged.append(str(folder))
             except OSError as exc:
                 errors.append(f"Failed to delete {folder}: {exc}")
@@ -2089,6 +2100,15 @@ if __name__ == "__main__":
     parser.add_argument("--host", default="127.0.0.1", help="HTTP host (default: 127.0.0.1)")
     parser.add_argument("--port", type=int, default=8001, help="HTTP port (default: 8001)")
     args = parser.parse_args()
+
+    if args.transport == "streamable-http":
+        if not _AUTH_REQUIRED:
+            print(
+                "ERROR: --transport streamable-http requires MOLAGENT_AUTH_REQUIRED=true. "
+                "Starting without auth exposes all tools to unauthenticated callers.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
     bootstrap_admin_token()
     if args.transport == "streamable-http":

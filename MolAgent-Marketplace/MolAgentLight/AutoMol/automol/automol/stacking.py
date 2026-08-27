@@ -699,7 +699,15 @@ class FeatureGenerationRegressor(BottleneckFeatureGenerator):
                 feature_na=np.logical_or([ np.isnan(row).any() for j, row in enumerate(feats[feature_name])],feature_na)
             if self.verbose:
                 print(f'Deleted the following smiles from training due to nan features/property value:{list(SM[feature_na])}')
-            y_train=df.loc[~np.logical_or(na,feature_na),prop].values
+            # Expand feature_na (len(SM)) back to len(df) and fold it into na, so that
+            # na is the single combined mask for the rest of the method — matching the
+            # other branch, where na already accounts for every dropped row. The shared
+            # sample_weight[~na] / groups[~na] lines below rely on this.
+            full_feature_na = np.zeros(len(df), dtype=bool)
+            full_feature_na[np.where(~na.values)[0]] = feature_na
+            na=np.logical_or(na,full_feature_na)
+            y_train=df.loc[~na,prop].values
+            # feats is indexed in SM space, so it keeps the SM-length feature_na mask
             X_train=np.concatenate( [feats[k][~feature_na] for k in features], axis=-1)
             X_blender=None
 

@@ -268,9 +268,11 @@ def test_list_users_reports_revoked_status():
 # ── store resilience ────────────────────────────────────────────────────────
 
 
-def test_corrupt_store_does_not_crash_validate(tmp_path, monkeypatch):
+def test_corrupt_store_raises_on_validate(tmp_path, monkeypatch):
     store = tmp_path / "auth_tokens.json"
     store.write_text("not valid json {{{")
     monkeypatch.setenv("MOLAGENT_TOKEN_STORE_PATH", str(store))
-    # A corrupt store should read as empty, not raise
-    assert validate_token("anything") is None
+    # A corrupt store must raise rather than silently resetting to empty (A-H2)
+    import json
+    with pytest.raises(json.JSONDecodeError):
+        validate_token("anything")

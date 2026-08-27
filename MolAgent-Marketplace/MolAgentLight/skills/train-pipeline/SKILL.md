@@ -38,22 +38,18 @@ When the MCP server is remote (added via `claude mcp add` with an HTTP URL), the
 **Upload flow**:
 
 1. Check if already uploaded: call `list_datasets()` and look for a matching filename.
-2. If not uploaded, use the **Read tool** to read `~/.claude.json` (Windows: `C:/Users/<username>/.claude.json`). Find the key under `projects` that matches the current project path, then read `.mcpServers.<server-name>.url` and `.headers.Authorization`. Strip `"Bearer "` from the Authorization value to get the token. Example structure:
-   ```json
-   {
-     "projects": {
-       "C:/Users/you/Projects/MyProject": {
-         "mcpServers": {
-           "molagent": {
-             "url": "http://127.0.0.1:8001/mcp",
-             "headers": { "Authorization": "Bearer molagent_usr_abc123..." }
-           }
-         }
-       }
-     }
-   }
+2. If not uploaded, retrieve the MCP URL and token by running:
+   ```bash
+   claude mcp get <server-name>
    ```
-   > **Do not grep for the token** — read the file directly with the Read tool. If `~/.claude.json` doesn't contain the server entry, also check `.claude/settings.local.json` and `.claude/settings.json` in the project root.
+   This prints the server URL and the `Authorization` header directly. Strip `"Bearer "` from the Authorization value to get the token. Example output:
+   ```
+   automol-mcp:
+     Type: http
+     URL: http://127.0.0.1:8001/mcp
+     Headers:
+       Authorization: Bearer molagent_usr_abc123...
+   ```
 3. Run this upload command via Bash, substituting the three values:
 
 ```bash

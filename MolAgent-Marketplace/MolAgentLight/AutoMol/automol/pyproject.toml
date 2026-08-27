@@ -39,7 +39,7 @@ dependencies = [
     # Core scientific computing
     "numpy>=1.21.0",
     "pandas",
-    "scikit-learn>=1.0.0",
+    "scikit-learn>=1.4.0",
     "scipy>=1.7.0",
     # Chemistry and molecular modeling
     "rdkit>=2023.9.5",

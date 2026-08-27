@@ -168,6 +168,7 @@ If running the MCP server or web app without the Claude Code marketplace (i.e. t
 ```bash
 cd MolAgent-Marketplace/MolAgentLight
 uv venv .venv
+sourve .venv/bin/activate
 uv pip install -e AutoMol/automol/
 uv pip install "fastmcp[tasks]" pandas pydantic
 cd app/frontend && npm install
@@ -217,12 +218,4 @@ Training scripts accept `--computational-load` with 4 levels:
 | `FASTMCP_DOCKET_REDELIVERY_TIMEOUT` | Docket redelivery timeout (seconds). Set to 86400 for long training. Default: 300. |
 
 See `MolAgent-Marketplace/MolAgentLight/CLAUDE.md` for the full env-var contract and Nexus integration details.
-
-## Nexus Integration
-
-The plugin declares a `nexus` block in `.claude-plugin/plugin.json` exposing the `molagent_dashboard` artifact type. To install into a Nexus host (e.g., `drug_discovery_ui`):
-
-1. Copy or symlink `MolAgent-Marketplace/MolAgentLight/` into the host's `plugins/` directory.
-2. Add `'molagent_dashboard'` to the host's playground type registry (e.g., `MOLECULAR_TYPES` in `playgroundTemplates.ts` for `nexus-atrium`).
-3. Restart the host so its bundled-plugin discovery picks up the new manifest.
 
