@@ -63,16 +63,17 @@ def _resolve_package_path(rel, absolute):
     return absolute
 
 
-def default_encoder():
+def default_encoder(num_threads=None):
     """Return a fresh instance of the default encoder (v6_best, E-logD, ChEMBL 37)."""
     base_dir = os.path.dirname(os.path.realpath(__file__))
     return MolBottleGenerator(
         export_dir=os.path.join(base_dir, "encoders", "e_logd"),
         variant="e_logd",
+        num_threads=num_threads,
     )
 
 
-def retrieve_default_offline_generators(model='CHEMBL', radius=2, nbits=2048):
+def retrieve_default_offline_generators(model='CHEMBL', radius=2, nbits=2048, num_threads=None):
     """
     Function that returns a dictionary of default internal feature generators.
 
@@ -88,14 +89,15 @@ def retrieve_default_offline_generators(model='CHEMBL', radius=2, nbits=2048):
     """
     base_dir = os.path.dirname(os.path.realpath(__file__))
 
-    logd = default_encoder()
+    logd = default_encoder(num_threads=num_threads)
     generators = {
         'Bottleneck': logd,
         'Bottleneck_chembl37_base': MolBottleGenerator(
             export_dir=os.path.join(base_dir, "encoders", "e_base"),
             variant="e_base",
+            num_threads=num_threads,
         ),
-        'Bottleneck_chembl27': OnnxBottleneckTransformer(),
+        'Bottleneck_chembl27': OnnxBottleneckTransformer(num_threads=num_threads),
         'rdkit': RDKITGenerator(),
         f'fps_{nbits}_{radius}': ECFPGenerator(radius=radius, nBits=nbits),
     }
@@ -548,6 +550,7 @@ class OnnxBottleneckTransformer(FeatureGenerator):
         providers: Optional[List[str]] = None,
         batch_size: int = 100,
         seq_len: int = 220,
+        num_threads: Optional[int] = None,
     ):
         """
         Initialize the ONNX-based bottleneck transformer.
@@ -581,6 +584,7 @@ class OnnxBottleneckTransformer(FeatureGenerator):
         self.vocab_path = vocab_path
         self.batch_size = batch_size
         self.seq_len = seq_len
+        self.num_threads = num_threads
 
         # Initialize tokenizer with vocabulary
         self.tokenizer = SmilesTokenizer(
@@ -601,7 +605,11 @@ class OnnxBottleneckTransformer(FeatureGenerator):
                 "python -m automol_onnx.conversion.export_bottleneck"
             )
 
-        self.session = ort.InferenceSession(model_path, providers=providers)
+        sess_opts = ort.SessionOptions()
+        if num_threads is not None:
+            sess_opts.intra_op_num_threads = num_threads
+            sess_opts.inter_op_num_threads = 1
+        self.session = ort.InferenceSession(model_path, sess_options=sess_opts, providers=providers)
 
         # Get input/output names from model
         self.input_name = self.session.get_inputs()[0].name
@@ -727,8 +735,12 @@ class OnnxBottleneckTransformer(FeatureGenerator):
                 "ONNX Runtime is required for inference. "
                 "Install with: pip install onnxruntime"
             )
-        self.model_path = _resolve_package_path(state.get('_model_path_rel'), state['model_path'])
-        self.session = ort.InferenceSession(self.model_path, providers=['CPUExecutionProvider'])
+        self.model_path = _resolve_package_path(state.get('_model_path_rel'), state.get('model_path') or state.get('_onnx_path', ''))
+        sess_opts = ort.SessionOptions()
+        if self.num_threads is not None:
+            sess_opts.intra_op_num_threads = self.num_threads
+            sess_opts.inter_op_num_threads = 1
+        self.session = ort.InferenceSession(self.model_path, sess_options=sess_opts, providers=['CPUExecutionProvider'])
         self.input_name = self.session.get_inputs()[0].name
         self.output_name = self.session.get_outputs()[0].name
 
@@ -764,6 +776,7 @@ class MolBottleGenerator(FeatureGenerator):
         export_dir: Optional[str] = None,
         batch_size: int = 100,
         variant: Optional[str] = None,
+        num_threads: Optional[int] = None,
     ):
         super().__init__()
 
@@ -797,8 +810,13 @@ class MolBottleGenerator(FeatureGenerator):
         self._max_len  = cfg["max_len"]
         self._onnx_path = str(onnx_path)
         self.batch_size = batch_size
+        self.num_threads = num_threads
 
-        self._sess = ort.InferenceSession(self._onnx_path, providers=["CPUExecutionProvider"])
+        sess_opts = ort.SessionOptions()
+        if num_threads is not None:
+            sess_opts.intra_op_num_threads = num_threads
+            sess_opts.inter_op_num_threads = 1
+        self._sess = ort.InferenceSession(self._onnx_path, sess_options=sess_opts, providers=["CPUExecutionProvider"])
         self._out_name = self._sess.get_outputs()[0].name
 
         self.nb_features = cfg["out_dim"]
@@ -860,7 +878,11 @@ class MolBottleGenerator(FeatureGenerator):
         self.__dict__.update(state)
         import onnxruntime as ort
         self._onnx_path = _resolve_package_path(state.get("_onnx_rel"), state["_onnx_path"])
-        self._sess = ort.InferenceSession(self._onnx_path, providers=["CPUExecutionProvider"])
+        sess_opts = ort.SessionOptions()
+        if self.num_threads is not None:
+            sess_opts.intra_op_num_threads = self.num_threads
+            sess_opts.inter_op_num_threads = 1
+        self._sess = ort.InferenceSession(self._onnx_path, sess_options=sess_opts, providers=["CPUExecutionProvider"])
         self._out_name = self._sess.get_outputs()[0].name
 
     def __repr__(self) -> str:

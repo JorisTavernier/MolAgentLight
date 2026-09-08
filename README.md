@@ -113,7 +113,7 @@ pip install -e MolAgent-Marketplace/MolAgentLight/AutoMol/automol/
 
 ```bash
 cd MolAgent-Marketplace/MolAgentLight
-uv venv .venv
+uv venv .venv --python 3.12
 source .venv/bin/activate
 uv pip install -e AutoMol/automol/
 uv pip install "fastmcp[tasks]" pandas pydantic
