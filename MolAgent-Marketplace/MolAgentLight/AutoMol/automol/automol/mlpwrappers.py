@@ -8,7 +8,7 @@ All rights reserved, Open Analytics NV, 2021-2025.
 """
 from sklearn.neural_network import MLPClassifier,MLPRegressor
 from sklearn.base import BaseEstimator, ClassifierMixin,RegressorMixin
-from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
+from sklearn.utils.validation import check_array, check_is_fitted, validate_data
 from sklearn.utils.multiclass import unique_labels
 
 
@@ -72,7 +72,7 @@ class MLPClassifierWrapper(BaseEstimator, ClassifierMixin):
         Returns:
             self
         """
-        X, y = check_X_y(X, y)
+        X, y = validate_data(self, X, y)
         self.classes_ = unique_labels(y)
         self.clf = MLPClassifier(hidden_layer_sizes=tuple(self.hidden_layers_size for i in range(self.hidden_layers) ), activation=self.activation,solver=self.solver,
                             alpha=self.alpha,batch_size=self.batch_size, learning_rate=self.learning_rate,
@@ -98,30 +98,16 @@ class MLPClassifierWrapper(BaseEstimator, ClassifierMixin):
     def predict_proba(self, X):
         """
         calls the predict_proba function of the mlpclassifier
-        
+
         Args:
             X: data matrix X
-        
+
         Returns:
             the probabilistic predictions
         """
         check_is_fitted(self.clf)
         X = check_array(X)
         return self.clf.predict_proba(X)
-    
-    def set_params(self, **parameters):
-        """
-        sets the parameters
-        
-        Args:
-            parameters: the parameter dictionary
-        
-        Returns:
-            self
-        """
-        for parameter, value in parameters.items():
-            setattr(self, parameter, value)
-        return self
 
 class MLPRegressorWrapper(BaseEstimator, RegressorMixin):
     """
@@ -181,7 +167,7 @@ class MLPRegressorWrapper(BaseEstimator, RegressorMixin):
         Returns:
             self
         """
-        X, y = check_X_y(X, y)
+        X, y = validate_data(self, X, y)
         self.reg = MLPRegressor(hidden_layer_sizes=tuple(self.hidden_layers_size for i in range(self.hidden_layers) ), activation=self.activation,solver=self.solver,
                             alpha=self.alpha,batch_size=self.batch_size, learning_rate=self.learning_rate,
                             learning_rate_init=self.learning_rate_init, max_iter=self.max_iter , random_state=self.random_state,
@@ -191,27 +177,13 @@ class MLPRegressorWrapper(BaseEstimator, RegressorMixin):
     def predict(self, X):
         """
         call the predict function of the MLPRegressor
-        
+
         Args:
             X: data matrix X
-        
+
         Returns:
             the predictions
         """
         check_is_fitted(self.reg)
         X = check_array(X)
         return self.reg.predict(X)
-    
-    def set_params(self, **parameters):
-        """
-        sets the parameters
-        
-        Args:
-            parameters: the parameter dictionary
-        
-        Returns:
-            self
-        """
-        for parameter, value in parameters.items():
-            setattr(self, parameter, value)
-        return self

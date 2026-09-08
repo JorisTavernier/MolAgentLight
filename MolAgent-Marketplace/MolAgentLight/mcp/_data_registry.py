@@ -98,10 +98,7 @@ def touch_registry_entry(registry_path: Path, entry_id: str) -> bool:
 
 
 def _data_registry_output_root() -> Path:
-    root = (
-        os.environ.get("PHARMAOS_MOLAGENT_ROOT")
-        or os.environ.get("MOLAGENT_OUTPUT_ROOT")
-    )
+    root = os.environ.get("MOLAGENT_OUTPUT_ROOT")
     if root:
         return Path(root).resolve()
     plugin_root = os.environ.get("MOLAGENT_PLUGIN_ROOT")
@@ -125,6 +122,7 @@ def register_dataset(
     size_bytes: int,
     columns: list[str],
     row_count: int,
+    sha256: Optional[str] = None,
 ) -> dict:
     """Register a new dataset entry. Returns the created entry."""
     registry_path = data_registry_path()
@@ -135,7 +133,7 @@ def register_dataset(
     try:
         data = load_json_list(registry_path)
         now = datetime.now().isoformat(timespec="seconds")
-        entry = {
+        entry: dict = {
             "id": f"ds_{secrets.token_urlsafe(12)}",
             "filename": filename,
             "owner": owner_id,
@@ -146,9 +144,41 @@ def register_dataset(
             "uploaded_at": now,
             "last_used": now,
         }
+        if sha256 is not None:
+            entry["sha256"] = sha256
         data.append(entry)
         atomic_write_json(registry_path, data)
         return entry
+    finally:
+        _release_lock(fd, lock)
+
+
+def update_dataset(
+    entry_id: str,
+    owner_id: Optional[str] = None,
+    **fields,
+) -> Optional[dict]:
+    """Update fields of an existing dataset entry in-place. Returns updated entry or None."""
+    registry_path = data_registry_path()
+    lock = _lock_path(registry_path)
+    fd = _acquire_lock(lock)
+    if fd is None:
+        raise RuntimeError("Could not acquire data registry lock")
+    try:
+        data = load_json_list(registry_path)
+        updated = None
+        for entry in data:
+            if entry.get("id") != entry_id:
+                continue
+            if owner_id is not None and entry.get("owner") != owner_id:
+                break
+            entry.update(fields)
+            entry["last_used"] = datetime.now().isoformat(timespec="seconds")
+            updated = entry
+            break
+        if updated:
+            atomic_write_json(registry_path, data)
+        return updated
     finally:
         _release_lock(fd, lock)
 

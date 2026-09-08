@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["fastmcp[tasks]", "pandas", "pydantic"]
+# dependencies = ["fastmcp[tasks]>=4", "pandas", "pydantic>=2.12"]
 # ///
 """AutoMol MCP server — thirteen tools:
 
@@ -43,11 +43,12 @@ from typing import Literal, Optional
 
 import pandas as pd
 from fastmcp import Context, FastMCP
+from fastmcp.exceptions import McpError
+from fastmcp_tasks import TasksExtension
 from fastmcp.server.auth import AccessToken, TokenVerifier
 from fastmcp.server.dependencies import Progress, get_access_token
 from fastmcp.server.providers.skills import SkillProvider
-from mcp import McpError
-from mcp.types import ErrorData, INTERNAL_ERROR
+from mcp.types import INTERNAL_ERROR
 
 # Ensure sibling modules are importable when run via `uv run`
 sys.path.insert(0, str(Path(__file__).parent))
@@ -59,12 +60,12 @@ from _auth import (  # noqa: E402
 )
 from _config import TrainingConfig, TrainingResult  # noqa: E402
 from _data_registry import (  # noqa: E402
-    touch_registry_entry, register_dataset, remove_dataset,
+    touch_registry_entry, register_dataset, update_dataset, remove_dataset,
     get_dataset, list_datasets_for_owner, data_registry_path,
     load_json_list, atomic_write_json, _lock_path as _dr_lock_path,
 )
-from _discovery import get_all_options, list_base_estimators, list_blender_estimators, list_dim_reduction_methods, list_feature_generators  # noqa: E402
-from _pipeline import run_full_pipeline, _plugin_root, _scripts_dir, _venv_path, _output_root, _run_script_sync  # noqa: E402
+from _discovery import get_all_options, list_base_estimators, list_blender_estimators, list_dim_reduction_methods, list_feature_generator_aliases, list_feature_generators  # noqa: E402
+from _pipeline import run_full_pipeline, _plugin_root, _scripts_dir, _venv_path, _output_root, _run_script_sync, _under_output_root, _active_run_folders  # noqa: E402
 from _sanitize import sanitize_model_entry, sanitize_train_result, sanitize_predict_result  # noqa: E402
 
 # Warm all discovery caches at startup (before event loop starts).
@@ -86,6 +87,11 @@ finally:
 logger = logging.getLogger(__name__)
 
 _AUTH_REQUIRED = os.environ.get("MOLAGENT_AUTH_REQUIRED", "").lower() in ("1", "true", "yes")
+
+
+def _valid_feature_keys() -> set[str]:
+    """Feature keys accepted from callers: canonical listed keys plus aliases."""
+    return (set(list_feature_generators()) | set(list_feature_generator_aliases())) - {"_note"}
 
 
 # ── Auth provider for FastMCP ─────────────────────────────────────────────────
@@ -148,10 +154,10 @@ def _require_auth(caller: dict | None) -> dict:
     if caller is None:
         return {"user_id": LOCAL_USER_ID, "is_admin": True}
     if caller["user_id"] == ANONYMOUS_USER_ID:
-        raise McpError(ErrorData(
+        raise McpError(
             code=INTERNAL_ERROR,
             message="Authentication required. Provide a valid Bearer token.",
-        ))
+        )
     return caller
 
 
@@ -170,13 +176,13 @@ def _ensure_path_access(caller: dict, *, what: str) -> None:
     """
     _, is_admin = _caller_privileges(caller)
     if not is_admin:
-        raise McpError(ErrorData(
+        raise McpError(
             code=INTERNAL_ERROR,
             message=(
                 f"Direct {what} path access is not allowed. Upload your data "
                 "with upload_dataset and reference it by dataset_id."
             ),
-        ))
+        )
 
 
 def _resolve_data_reference(caller: dict, value: str, *, what: str) -> str:
@@ -192,18 +198,18 @@ def _resolve_data_reference(caller: dict, value: str, *, what: str) -> str:
         ds_entry = get_dataset(value)
         if ds_entry is not None:
             if not is_admin and ds_entry.get("owner") != caller.get("owner_id"):
-                raise McpError(ErrorData(
+                raise McpError(
                     code=INTERNAL_ERROR,
                     message=f"Access denied: dataset '{value}' does not belong to you.",
-                ))
+                )
             touch_registry_entry(data_registry_path(), ds_entry["id"])
             return str(_output_root() / ds_entry["file_path"])
         # Not a known dataset id. Non-admins cannot fall back to a raw path.
         if not is_admin:
-            raise McpError(ErrorData(
+            raise McpError(
                 code=INTERNAL_ERROR,
                 message=f"Dataset '{value}' not found in data registry.",
-            ))
+            )
         # Admin: may legitimately be a real path that starts with 'ds_'.
     _ensure_path_access(caller, what=what)
     return value
@@ -235,8 +241,10 @@ def _delete_model_entry_files(entry: dict, errors: list[str] | None = None) -> i
     run_folder = entry.get("run_folder")
     if run_folder and Path(run_folder).exists():
         try:
-            shutil.rmtree(run_folder)
+            shutil.rmtree(_under_output_root(Path(run_folder)))
             removed += 1
+        except ValueError:
+            _note(f"Skipped run_folder outside output root: {run_folder}")
         except OSError as exc:
             _note(f"Failed to delete {run_folder}: {exc}")
         return removed
@@ -245,7 +253,10 @@ def _delete_model_entry_files(entry: dict, errors: list[str] | None = None) -> i
     if isinstance(model_files, str):
         model_files = [model_files]
     for mf in model_files:
-        p = Path(mf)
+        try:
+            p = _under_output_root(Path(mf))
+        except ValueError:
+            continue   # skip files outside the output root
         if p.exists():
             try:
                 p.unlink()
@@ -269,7 +280,8 @@ mcp = FastMCP(
         "DOMAIN TERMS:\n"
         "- blender_properties: auxiliary numeric columns used as extra input features "
         "(not targets)\n"
-        "- feature_keys: molecular representation methods (Bottleneck, rdkit, fps_*), "
+        "- feature_keys: molecular representation methods (Bottleneck, "
+        "Bottleneck_chembl37_base, Bottleneck_chembl27, rdkit, fps_*), "
         "not CSV column names\n"
         "- computational_load: runtime budget "
         "(free ~2min, cheap ~10min, moderate ~1hr, expensive ~24hr)\n\n"
@@ -282,6 +294,7 @@ mcp = FastMCP(
         "Download: download_model(model_id=...) → base64 binary."
     ),
 )
+mcp.add_extension(TasksExtension())
 
 # ── Skill resource (provides orchestration guidance to any MCP client) ────────
 _skill_dir = Path(__file__).parent / "skills" / "automol-pipeline"
@@ -339,22 +352,22 @@ def _get_session(session_id: str) -> _SessionState:
     with _sessions_lock:
         session = _sessions.get(session_id)
         if session is None:
-            raise McpError(ErrorData(
+            raise McpError(
                 code=INTERNAL_ERROR,
                 message=(
                     f"Session '{session_id}' not found or expired. "
                     "Call start_training_session to begin a new session."
                 ),
-            ))
+            )
         if time.monotonic() - session.last_touched > SESSION_TTL:
             del _sessions[session_id]
-            raise McpError(ErrorData(
+            raise McpError(
                 code=INTERNAL_ERROR,
                 message=(
                     f"Session '{session_id}' has expired (90 min timeout). "
                     "Call start_training_session to begin a new session."
                 ),
-            ))
+            )
         session.touch()
         return session
 
@@ -424,15 +437,15 @@ async def start_training_session(
     if dataset_id is not None:
         ds_entry = get_dataset(dataset_id)
         if ds_entry is None:
-            raise McpError(ErrorData(
+            raise McpError(
                 code=INTERNAL_ERROR,
                 message=f"Dataset '{dataset_id}' not found in data registry.",
-            ))
+            )
         if not is_admin and ds_entry.get("owner") != caller.get("owner_id"):
-            raise McpError(ErrorData(
+            raise McpError(
                 code=INTERNAL_ERROR,
                 message=f"Access denied: dataset '{dataset_id}' does not belong to you.",
-            ))
+            )
         csv_file = str(_output_root() / ds_entry["file_path"])
         session_dataset_id = dataset_id
         touch_registry_entry(data_registry_path(), dataset_id)
@@ -441,7 +454,7 @@ async def start_training_session(
         # Register the CSV in the data registry if not already tracked
         csv_path_check = Path(csv_file)
         if not csv_path_check.exists():
-            raise McpError(ErrorData(code=INTERNAL_ERROR, message=f"CSV file not found: {csv_file}"))
+            raise McpError(code=INTERNAL_ERROR, message=f"CSV file not found: {csv_file}")
         owner_id = caller.get("owner_id", LOCAL_USER_ID)
         # Check if already registered (match by absolute path)
         abs_csv = str(csv_path_check.resolve())
@@ -490,21 +503,21 @@ async def start_training_session(
             )
             session_dataset_id = new_entry["id"]
     else:
-        raise McpError(ErrorData(
+        raise McpError(
             code=INTERNAL_ERROR,
             message="Provide either csv_file or dataset_id.",
-        ))
+        )
 
     csv_path = Path(csv_file)
     if not csv_path.exists():
-        raise McpError(ErrorData(code=INTERNAL_ERROR, message=f"CSV file not found: {csv_file}"))
+        raise McpError(code=INTERNAL_ERROR, message=f"CSV file not found: {csv_file}")
 
     # ── Read CSV columns ──────────────────────────────────────────────────────
     try:
         df_head = pd.read_csv(csv_path, nrows=1)
         csv_columns = list(df_head.columns)
     except Exception as exc:
-        raise McpError(ErrorData(code=INTERNAL_ERROR, message=f"Could not read CSV columns: {exc}"))
+        raise McpError(code=INTERNAL_ERROR, message=f"Could not read CSV columns: {exc}")
 
     # ── Run detect_dataset.py ─────────────────────────────────────────────────
     detect_script = _scripts_dir() / "detect_dataset.py"
@@ -773,7 +786,7 @@ async def answer_training_question(
     if feature_keys is not None:
         import re
         _fps_pattern = re.compile(r"^fps_\d+_\d+$")
-        valid_features = set(list_feature_generators().keys()) - {"_note"}
+        valid_features = _valid_feature_keys()
         invalid = [k for k in feature_keys if k not in valid_features and not _fps_pattern.match(k)]
         if invalid:
             validation_messages.append(
@@ -887,7 +900,7 @@ async def answer_training_question(
         try:
             final = TrainingConfig.model_validate(config)
         except Exception as exc:
-            raise McpError(ErrorData(code=INTERNAL_ERROR, message=f"Invalid config: {exc}"))
+            raise McpError(code=INTERNAL_ERROR, message=f"Invalid config: {exc}")
         with _sessions_lock:
             _sessions.pop(session_id, None)
         return {
@@ -946,7 +959,7 @@ async def train_and_visualize(config: dict, ctx: Context, progress: Progress = P
     try:
         training_config = TrainingConfig.model_validate(config)
     except Exception as exc:
-        raise McpError(ErrorData(code=INTERNAL_ERROR, message=f"Invalid config: {exc}"))
+        raise McpError(code=INTERNAL_ERROR, message=f"Invalid config: {exc}")
 
     # Resolve csv_file: a ds_ value is a registry id (ownership checked),
     # anything else is a direct path (admin/local only).
@@ -955,7 +968,7 @@ async def train_and_visualize(config: dict, ctx: Context, progress: Progress = P
 
     csv_path = Path(csv_file_val)
     if not csv_path.exists():
-        raise McpError(ErrorData(code=INTERNAL_ERROR, message=f"CSV file not found: {csv_file_val}"))
+        raise McpError(code=INTERNAL_ERROR, message=f"CSV file not found: {csv_file_val}")
 
     # output_folder is an arbitrary filesystem path written to by the pipeline —
     # gate it the same way csv_file/smiles_file/model_file are gated, so a
@@ -979,7 +992,7 @@ async def train_and_visualize(config: dict, ctx: Context, progress: Progress = P
     try:
         result = await run_full_pipeline(training_config, progress_cb=progress_cb, owner=owner)
     except RuntimeError as exc:
-        raise McpError(ErrorData(code=INTERNAL_ERROR, message=str(exc)))
+        raise McpError(code=INTERNAL_ERROR, message=str(exc))
 
     await progress.set_message("Complete")
     result_dict = result.model_dump()
@@ -1128,30 +1141,30 @@ async def predict(
     if model_id is not None:
         registry_path = _registry_path()
         if not registry_path.exists():
-            raise McpError(ErrorData(
+            raise McpError(
                 code=INTERNAL_ERROR,
                 message=f"Registry not found at {registry_path}. No models available.",
-            ))
+            )
         try:
             registry = json.loads(registry_path.read_text())
         except (json.JSONDecodeError, OSError) as exc:
-            raise McpError(ErrorData(code=INTERNAL_ERROR, message=f"Cannot read registry: {exc}"))
+            raise McpError(code=INTERNAL_ERROR, message=f"Cannot read registry: {exc}")
 
         entry = next((e for e in registry if e.get("id") == model_id), None)
         if entry is None:
             available = [e.get("id") for e in registry]
-            raise McpError(ErrorData(
+            raise McpError(
                 code=INTERNAL_ERROR,
                 message=f"Model '{model_id}' not found. Available: {available}",
-            ))
+            )
 
         if not is_admin:
             entry_owner = entry.get("owner")
             if entry_owner is None or entry_owner != caller.get("owner_id"):
-                raise McpError(ErrorData(
+                raise McpError(
                     code=INTERNAL_ERROR,
                     message=f"Access denied: model '{model_id}' does not belong to you.",
-                ))
+                )
 
         mf = entry.get("model_file")
         if isinstance(mf, list):
@@ -1159,7 +1172,7 @@ async def predict(
         elif isinstance(mf, str):
             resolved_model_file = mf
         else:
-            raise McpError(ErrorData(code=INTERNAL_ERROR, message="Invalid model_file in registry entry."))
+            raise McpError(code=INTERNAL_ERROR, message="Invalid model_file in registry entry.")
 
         touch_registry_entry(registry_path, model_id)
 
@@ -1176,31 +1189,31 @@ async def predict(
 
     # ── Validate model file exists ───────────────────────────────────────────
     if not Path(resolved_model_file).exists():
-        raise McpError(ErrorData(
+        raise McpError(
             code=INTERNAL_ERROR,
             message=f"Model file not found: {resolved_model_file}",
-        ))
+        )
 
     # ── Validate SMILES input ────────────────────────────────────────────────
     if smiles_list is None and smiles_file is None:
-        raise McpError(ErrorData(
+        raise McpError(
             code=INTERNAL_ERROR,
             message="Provide either smiles_list or smiles_file.",
-        ))
+        )
 
     if smiles_file is not None and not Path(smiles_file).exists():
-        raise McpError(ErrorData(
+        raise McpError(
             code=INTERNAL_ERROR,
             message=f"SMILES file not found: {smiles_file}",
-        ))
+        )
 
     # ── Build predict script args ────────────────────────────────────────────
     predict_script = _plugin_root() / "skills" / "predict" / "scripts" / "predict.py"
     if not predict_script.exists():
-        raise McpError(ErrorData(
+        raise McpError(
             code=INTERNAL_ERROR,
             message=f"Predict script not found: {predict_script}",
-        ))
+        )
 
     output_folder = _output_root() / "predictions"
     output_folder.mkdir(parents=True, exist_ok=True)
@@ -1241,7 +1254,7 @@ async def predict(
             _run_script_sync, predict_script, args, _scripts_dir()
         )
     except RuntimeError as exc:
-        raise McpError(ErrorData(code=INTERNAL_ERROR, message=str(exc)))
+        raise McpError(code=INTERNAL_ERROR, message=str(exc))
 
     # ── Find the output CSV ──────────────────────────────────────────────────
     # Prefer parsing the explicit path from stdout (most reliable)
@@ -1335,18 +1348,18 @@ async def merge_models(
     _require_auth(caller)
 
     if len(model_ids) < 2:
-        raise McpError(ErrorData(code=INTERNAL_ERROR, message="At least 2 model IDs required for merging."))
+        raise McpError(code=INTERNAL_ERROR, message="At least 2 model IDs required for merging.")
 
     registry_path = _registry_path()
     if not registry_path.exists():
-        raise McpError(ErrorData(code=INTERNAL_ERROR, message="Registry not found."))
+        raise McpError(code=INTERNAL_ERROR, message="Registry not found.")
 
     try:
         data = json.loads(registry_path.read_text())
         if not isinstance(data, list):
             data = []
     except (json.JSONDecodeError, OSError) as exc:
-        raise McpError(ErrorData(code=INTERNAL_ERROR, message=f"Cannot read registry: {exc}"))
+        raise McpError(code=INTERNAL_ERROR, message=f"Cannot read registry: {exc}")
 
     if caller is None:
         is_admin, owner_id = True, None
@@ -1359,20 +1372,20 @@ async def merge_models(
     for mid in model_ids:
         entry = next((e for e in data if e.get("id") == mid), None)
         if entry is None:
-            raise McpError(ErrorData(code=INTERNAL_ERROR, message=f"Model '{mid}' not found in registry."))
+            raise McpError(code=INTERNAL_ERROR, message=f"Model '{mid}' not found in registry.")
         if not is_admin:
             entry_owner = entry.get("owner")
             if entry_owner is None or entry_owner != owner_id:
-                raise McpError(ErrorData(code=INTERNAL_ERROR, message=f"Access denied: model '{mid}' does not belong to you."))
+                raise McpError(code=INTERNAL_ERROR, message=f"Access denied: model '{mid}' does not belong to you.")
         entries.append(entry)
 
     # Validate same task type
     task_types = set(e.get("task_type", "unknown") for e in entries)
     if len(task_types) > 1:
-        raise McpError(ErrorData(
+        raise McpError(
             code=INTERNAL_ERROR,
             message=f"Cannot merge models with different task types: {task_types}",
-        ))
+        )
     task_type = task_types.pop()
 
     # Check no overlapping properties
@@ -1381,10 +1394,10 @@ async def merge_models(
         props = entry.get("target_properties", [])
         for p in props:
             if p in all_props:
-                raise McpError(ErrorData(
+                raise McpError(
                     code=INTERNAL_ERROR,
                     message=f"Overlapping property '{p}' — cannot merge models that predict the same property.",
-                ))
+                )
             all_props.append(p)
 
     # Resolve model file paths
@@ -1396,18 +1409,18 @@ async def merge_models(
         elif isinstance(mf, str):
             model_files.append(mf)
         else:
-            raise McpError(ErrorData(
+            raise McpError(
                 code=INTERNAL_ERROR,
                 message=f"Model '{entry.get('id')}' has no model_file in registry.",
-            ))
+            )
 
     # Verify files exist
     for mf in model_files:
         if not Path(mf).exists():
-            raise McpError(ErrorData(
+            raise McpError(
                 code=INTERNAL_ERROR,
                 message=f"Model file not found on disk: {mf}",
-            ))
+            )
 
     # Determine output path. output_name is sanitized with Path(...).name (same
     # treatment as upload_dataset's filename) so it cannot escape output_root
@@ -1418,7 +1431,7 @@ async def merge_models(
     suffix = "reg" if "regression" in task_type else "clf"
     merged_name = Path(output_name).name if output_name else f"merged_{timestamp}"
     if not merged_name or merged_name in (".", ".."):
-        raise McpError(ErrorData(code=INTERNAL_ERROR, message=f"Invalid output_name: {output_name}"))
+        raise McpError(code=INTERNAL_ERROR, message=f"Invalid output_name: {output_name}")
     merged_folder = output_root / f"merged-{merged_name}"
     merged_folder.mkdir(parents=True, exist_ok=True)
     output_file = merged_folder / f"merged_stacking{suffix}model.pt"
@@ -1434,13 +1447,13 @@ async def merge_models(
     try:
         stdout = await asyncio.to_thread(_run_script_sync, merge_script, merge_args)
     except RuntimeError as exc:
-        raise McpError(ErrorData(code=INTERNAL_ERROR, message=f"Merge failed: {exc}"))
+        raise McpError(code=INTERNAL_ERROR, message=f"Merge failed: {exc}")
 
     if not output_file.exists():
-        raise McpError(ErrorData(
+        raise McpError(
             code=INTERNAL_ERROR,
             message=f"Merge script completed but output file not found: {output_file}",
-        ))
+        )
 
     # Combine metrics from source models
     combined_metrics = {}
@@ -1474,7 +1487,7 @@ async def merge_models(
     lock_path = registry_path.with_suffix(registry_path.suffix + ".lock")
     fd = _acquire_lock(lock_path)
     if fd is None:
-        raise McpError(ErrorData(code=INTERNAL_ERROR, message="Could not acquire registry lock."))
+        raise McpError(code=INTERNAL_ERROR, message="Could not acquire registry lock.")
     try:
         import tempfile as _tempfile
         current = json.loads(registry_path.read_text()) if registry_path.exists() else []
@@ -1524,34 +1537,34 @@ async def delete_model(model_id: str, ctx: Context) -> dict:
 
     registry_path = _registry_path()
     if not registry_path.exists():
-        raise McpError(ErrorData(code=INTERNAL_ERROR, message="Registry not found."))
+        raise McpError(code=INTERNAL_ERROR, message="Registry not found.")
 
     try:
         data = json.loads(registry_path.read_text())
         if not isinstance(data, list):
             data = []
     except (json.JSONDecodeError, OSError) as exc:
-        raise McpError(ErrorData(code=INTERNAL_ERROR, message=f"Cannot read registry: {exc}"))
+        raise McpError(code=INTERNAL_ERROR, message=f"Cannot read registry: {exc}")
 
     entry = next((e for e in data if e.get("id") == model_id), None)
     if entry is None:
-        raise McpError(ErrorData(
+        raise McpError(
             code=INTERNAL_ERROR,
             message=f"Model '{model_id}' not found in registry.",
-        ))
+        )
 
     if not is_admin:
         entry_owner = entry.get("owner")
         if entry_owner is None or entry_owner != caller.get("owner_id"):
-            raise McpError(ErrorData(
+            raise McpError(
                 code=INTERNAL_ERROR,
                 message=f"Access denied: model '{model_id}' does not belong to you.",
-            ))
+            )
 
     lock_path = registry_path.with_suffix(registry_path.suffix + ".lock")
     fd = _acquire_lock(lock_path)
     if fd is None:
-        raise McpError(ErrorData(code=INTERNAL_ERROR, message="Could not acquire registry lock."))
+        raise McpError(code=INTERNAL_ERROR, message="Could not acquire registry lock.")
 
     try:
         # Re-read under lock
@@ -1602,29 +1615,29 @@ async def download_model(model_id: str, ctx: Context) -> dict:
 
     registry_path = _registry_path()
     if not registry_path.exists():
-        raise McpError(ErrorData(code=INTERNAL_ERROR, message="Registry not found."))
+        raise McpError(code=INTERNAL_ERROR, message="Registry not found.")
 
     try:
         data = json.loads(registry_path.read_text())
         if not isinstance(data, list):
             data = []
     except (json.JSONDecodeError, OSError) as exc:
-        raise McpError(ErrorData(code=INTERNAL_ERROR, message=f"Cannot read registry: {exc}"))
+        raise McpError(code=INTERNAL_ERROR, message=f"Cannot read registry: {exc}")
 
     entry = next((e for e in data if e.get("id") == model_id), None)
     if entry is None:
-        raise McpError(ErrorData(
+        raise McpError(
             code=INTERNAL_ERROR,
             message=f"Model '{model_id}' not found in registry.",
-        ))
+        )
 
     if not is_admin:
         entry_owner = entry.get("owner")
         if entry_owner is None or entry_owner != caller.get("owner_id"):
-            raise McpError(ErrorData(
+            raise McpError(
                 code=INTERNAL_ERROR,
                 message=f"Access denied: model '{model_id}' does not belong to you.",
-            ))
+            )
 
     mf = entry.get("model_file")
     if isinstance(mf, list):
@@ -1632,12 +1645,13 @@ async def download_model(model_id: str, ctx: Context) -> dict:
     elif isinstance(mf, str):
         model_path = Path(mf)
     else:
-        raise McpError(ErrorData(code=INTERNAL_ERROR, message="Invalid model_file in registry."))
+        raise McpError(code=INTERNAL_ERROR, message="Invalid model_file in registry.")
 
     try:
+        model_path = _under_output_root(model_path)
         model_bytes = model_path.read_bytes()
     except OSError:
-        raise McpError(ErrorData(code=INTERNAL_ERROR, message=f"Model file not found: {model_path}"))
+        raise McpError(code=INTERNAL_ERROR, message=f"Model file not found: {model_path}")
     model_b64 = base64.b64encode(model_bytes).decode()
 
     touch_registry_entry(registry_path, model_id)
@@ -1680,10 +1694,10 @@ async def upload_dataset(
     max_bytes = _max_upload_bytes()
 
     def _reject_too_large() -> None:
-        raise McpError(ErrorData(
+        raise McpError(
             code=INTERNAL_ERROR,
             message=f"Upload exceeds maximum size of {max_bytes // (1024 * 1024)} MB.",
-        ))
+        )
 
     # Reject oversized payloads before decoding (base64 inflates ~4/3, so the
     # encoded string is checked against the decoded-byte budget directly).
@@ -1694,7 +1708,7 @@ async def upload_dataset(
     try:
         raw_bytes = base64.b64decode(file_content_b64)
     except Exception as exc:
-        raise McpError(ErrorData(code=INTERNAL_ERROR, message=f"Invalid base64 content: {exc}"))
+        raise McpError(code=INTERNAL_ERROR, message=f"Invalid base64 content: {exc}")
 
     if len(raw_bytes) > max_bytes:
         _reject_too_large()
@@ -1705,44 +1719,70 @@ async def upload_dataset(
         reader = csv.reader(io.StringIO(text))
         header = next(reader, None)
         if not header:
-            raise McpError(ErrorData(code=INTERNAL_ERROR, message="CSV has no header row."))
+            raise McpError(code=INTERNAL_ERROR, message="CSV has no header row.")
         row_count = sum(1 for _ in reader)
     except McpError:
         raise
     except Exception as exc:
-        raise McpError(ErrorData(code=INTERNAL_ERROR, message=f"Could not parse CSV: {exc}"))
+        raise McpError(code=INTERNAL_ERROR, message=f"Could not parse CSV: {exc}")
+
+    import hashlib
+    sha256 = hashlib.sha256(raw_bytes).hexdigest()
 
     # Sanitize filename to prevent path traversal
     safe_filename = Path(filename).name
     if not safe_filename or safe_filename in (".", ".."):
-        raise McpError(ErrorData(code=INTERNAL_ERROR, message=f"Invalid filename: {filename}"))
+        raise McpError(code=INTERNAL_ERROR, message=f"Invalid filename: {filename}")
 
-    # Storage path: uploads/<owner_id>/<safe_filename>
+    # Scenario 2: identical content already registered for this owner → return as-is
+    owner_entries = list_datasets_for_owner(owner_id)
+    for existing in owner_entries:
+        if existing.get("sha256") == sha256:
+            touch_registry_entry(data_registry_path(), existing["id"])
+            return {
+                "dataset_id": existing["id"],
+                "filename": existing["filename"],
+                "columns": existing["columns"],
+                "row_count": existing["row_count"],
+                "size_bytes": existing["size_bytes"],
+            }
+
+    # Scenario 1: same filename for this owner → overwrite file, update entry in-place
+    name_match = next((e for e in owner_entries if e.get("filename") == safe_filename), None)
+    if name_match:
+        dest = (_output_root() / name_match["file_path"]).resolve()
+        dest.write_bytes(raw_bytes)
+        entry = update_dataset(
+            name_match["id"],
+            owner_id=owner_id,
+            sha256=sha256,
+            size_bytes=len(raw_bytes),
+            columns=header,
+            row_count=row_count,
+        ) or name_match
+        return {
+            "dataset_id": entry["id"],
+            "filename": entry["filename"],
+            "columns": entry["columns"],
+            "row_count": entry["row_count"],
+            "size_bytes": entry["size_bytes"],
+        }
+
+    # New dataset — write file and register
     uploads_dir = _output_root() / "uploads" / owner_id
     uploads_dir.mkdir(parents=True, exist_ok=True)
-
-    # Deduplicate filename
     dest = uploads_dir / safe_filename
-    if dest.exists():
-        stem = dest.stem
-        suffix = dest.suffix
-        n = 2
-        while dest.exists():
-            dest = uploads_dir / f"{stem}_{n}{suffix}"
-            n += 1
-
     dest.write_bytes(raw_bytes)
-
-    # Relative path for registry (relative to _output_root())
     rel_path = f"uploads/{owner_id}/{dest.name}"
 
     entry = register_dataset(
         owner_id=owner_id,
-        filename=dest.name,
+        filename=safe_filename,
         file_path=rel_path,
         size_bytes=len(raw_bytes),
         columns=header,
         row_count=row_count,
+        sha256=sha256,
     )
 
     return {
@@ -1809,10 +1849,10 @@ async def delete_dataset(dataset_id: str, ctx: Context) -> dict:
 
     removed = remove_dataset(dataset_id, owner_id=owner_id)
     if removed is None:
-        raise McpError(ErrorData(
+        raise McpError(
             code=INTERNAL_ERROR,
             message=f"Dataset '{dataset_id}' not found or access denied.",
-        ))
+        )
 
     # Delete file from disk
     file_path = _output_root() / removed["file_path"]
@@ -1864,46 +1904,49 @@ async def admin_manage(
     _, is_admin = _caller_privileges(caller)
 
     if not is_admin:
-        raise McpError(ErrorData(
+        raise McpError(
             code=INTERNAL_ERROR,
             message="Access denied: admin privileges required.",
-        ))
+        )
 
     if action == "create_token":
         if not user_id:
-            raise McpError(ErrorData(
+            raise McpError(
                 code=INTERNAL_ERROR,
                 message="user_id is required for create_token action.",
-            ))
-        token = create_user_token(user_id)
+            )
+        try:
+            token = create_user_token(user_id)
+        except ValueError as exc:
+            raise McpError(code=INTERNAL_ERROR, message=str(exc))
         return {"status": "created", "user_id": user_id, "token": token}
 
     elif action == "revoke_user":
         if not owner_id:
-            raise McpError(ErrorData(
+            raise McpError(
                 code=INTERNAL_ERROR,
                 message="owner_id is required for revoke_user action (see list_users).",
-            ))
+            )
         success = revoke_user(owner_id)
         if not success:
-            raise McpError(ErrorData(
+            raise McpError(
                 code=INTERNAL_ERROR,
                 message=f"No user with owner_id '{owner_id}' found in store.",
-            ))
+            )
         return {"status": "revoked", "owner_id": owner_id}
 
     elif action == "rotate_token":
         if not owner_id:
-            raise McpError(ErrorData(
+            raise McpError(
                 code=INTERNAL_ERROR,
                 message="owner_id is required for rotate_token action (see list_users).",
-            ))
+            )
         rotated = rotate_user_token(owner_id)
         if rotated is None:
-            raise McpError(ErrorData(
+            raise McpError(
                 code=INTERNAL_ERROR,
                 message=f"No user with owner_id '{owner_id}' found in store.",
-            ))
+            )
         new_token, user_name = rotated
         return {"status": "rotated", "owner_id": owner_id, "user_id": user_name, "token": new_token}
 
@@ -1912,11 +1955,11 @@ async def admin_manage(
         return {"status": "ok", "users": users}
 
     elif action == "purge_stale":
-        if max_age_days is None:
-            raise McpError(ErrorData(
+        if max_age_days is None or max_age_days < 1:
+            raise McpError(
                 code=INTERNAL_ERROR,
-                message="max_age_days is required for purge_stale action.",
-            ))
+                message="max_age_days must be >= 1 for purge_stale action.",
+            )
 
         from datetime import datetime, timedelta
 
@@ -2008,11 +2051,11 @@ async def admin_manage(
         }
 
     elif action == "purge_orphans":
-        if max_age_days is None:
-            raise McpError(ErrorData(
+        if max_age_days is None or max_age_days < 1:
+            raise McpError(
                 code=INTERNAL_ERROR,
-                message="max_age_days is required for purge_orphans action.",
-            ))
+                message="max_age_days must be >= 1 for purge_orphans action.",
+            )
 
         cutoff_ts = time.time() - max_age_days * 86400
         output_root = _output_root()
@@ -2052,7 +2095,9 @@ async def admin_manage(
         errors = []
         for folder in orphans:
             try:
-                shutil.rmtree(folder)
+                if str(folder.resolve()) in _active_run_folders:
+                    continue   # pipeline is actively writing to this folder
+                shutil.rmtree(_under_output_root(folder))
                 purged.append(str(folder))
             except OSError as exc:
                 errors.append(f"Failed to delete {folder}: {exc}")
@@ -2064,10 +2109,10 @@ async def admin_manage(
         }
 
     else:
-        raise McpError(ErrorData(
+        raise McpError(
             code=INTERNAL_ERROR,
             message=f"Unknown action: {action}",
-        ))
+        )
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
@@ -2083,6 +2128,15 @@ if __name__ == "__main__":
     parser.add_argument("--host", default="127.0.0.1", help="HTTP host (default: 127.0.0.1)")
     parser.add_argument("--port", type=int, default=8001, help="HTTP port (default: 8001)")
     args = parser.parse_args()
+
+    if args.transport == "streamable-http":
+        if not _AUTH_REQUIRED:
+            print(
+                "ERROR: --transport streamable-http requires MOLAGENT_AUTH_REQUIRED=true. "
+                "Starting without auth exposes all tools to unauthenticated callers.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
     bootstrap_admin_token()
     if args.transport == "streamable-http":

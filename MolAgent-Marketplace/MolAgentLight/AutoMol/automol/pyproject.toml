@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "automol"
-version = "1.0.0"
+version = "2.0.0"
 description = "AutoMol: Automated Machine Learning Pipeline for Drug Discovery"
 # readme will be set at package level
 license = {text = "All rights reserved, Open Analytics NV, 2021-2025"}
@@ -39,7 +39,7 @@ dependencies = [
     # Core scientific computing
     "numpy>=1.21.0",
     "pandas",
-    "scikit-learn>=1.0.0",
+    "scikit-learn>=1.4.0",
     "scipy>=1.7.0",
     # Chemistry and molecular modeling
     "rdkit>=2023.9.5",
@@ -101,7 +101,12 @@ include = ["automol*"]
 exclude = ["tests*", "docs*", "build*"]
 
 [tool.setuptools.package-data]
-"automol" = ["*.jpg", "*.html", "*.csv", "*.json", "*.onnx", "*.onnx.data"]
+"automol" = [
+    "*.jpg", "*.html", "*.csv", "*.json", "*.onnx", "*.onnx.data",
+    # Encoder exports live in non-package subdirectories, so they need
+    # explicit nested globs — the flat "*.onnx" pattern does not match them.
+    "encoders/*/*.json", "encoders/*/*.onnx",
+]
 "automol.pdf_template" = ["*.jpg", "*.html", "*.csv"]
 
 # Development tools configuration

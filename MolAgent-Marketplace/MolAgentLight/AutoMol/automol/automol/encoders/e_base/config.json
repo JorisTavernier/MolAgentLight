@@ -1,0 +1,49 @@
+{
+  "encoder": "sequence",
+  "out_dim": 250,
+  "pooling": "cls",
+  "max_len": 220,
+  "pad_index": 0,
+  "vocab_size": 157,
+  "nhead": 10,
+  "num_layers": 4,
+  "dropout": 0.1,
+  "chembl_version": 37,
+  "standardizer": {
+    "log10_tpsa": [
+      1.8938885798455274,
+      0.23728094538104033
+    ],
+    "qed": [
+      0.5356426998321211,
+      0.22645988727342056
+    ],
+    "num_h_acceptors": [
+      5.65995857106691,
+      2.90460242512368
+    ],
+    "num_h_donors": [
+      1.7784346475230706,
+      2.1345304857962306
+    ],
+    "alogp": [
+      3.535205454847474,
+      1.8582294232312502
+    ],
+    "fraction_csp3": [
+      0.344350205736621,
+      0.2040401605408979
+    ],
+    "num_aromatic_rings": [
+      2.597219775956374,
+      1.2686466261009268
+    ],
+    "num_rings": [
+      3.7049506491776603,
+      1.5112522599669511
+    ]
+  },
+  "standardizer_note": "raw = standardized * sd + mu; sd is ddof=1, fit on train-split labelled rows only",
+  "source_checkpoint": "runs/full_cls/version_2/checkpoints/best.ckpt",
+  "source_epoch": 39
+}

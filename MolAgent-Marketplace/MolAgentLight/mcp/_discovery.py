@@ -15,20 +15,39 @@ def list_feature_generators() -> dict[str, str]:
     """Return {key: description} of available feature generators."""
     result: dict[str, str] = {}
 
+    # Descriptions for the keys AutoMol always provides. Keyed by canonical name;
+    # aliases are deliberately not listed, so users see one entry per encoder.
+    _STATIC = {
+        "Bottleneck": (
+            "250-dim ONNX transformer encoder — v6_best / E-logD, full ChEMBL 37, "
+            "epoch 39 (default, best predictive accuracy)"
+        ),
+        "Bottleneck_chembl37_base": (
+            "250-dim ONNX transformer encoder — E-base, full ChEMBL 37, epoch 39. "
+            "No logD supervision, so use this for logD / logP / lipophilicity "
+            "endpoints, and for embedding-driven work such as similarity search"
+        ),
+        "Bottleneck_chembl27": (
+            "250-dim ONNX transformer encoder — legacy incumbent, ChEMBL 27 vocabulary"
+        ),
+        "rdkit": "RDKit 2D molecular descriptors (~210 features)",
+        "fps_2048_2": "Morgan circular fingerprints (2048 bits, radius 2)",
+    }
+
     try:
-        from automol.feature_generators import retrieve_default_offline_generators
-        defaults = retrieve_default_offline_generators()
-        for key in defaults:
-            if key == "Bottleneck":
-                result[key] = "250-dim ONNX pretrained transformer encoder (fast, recommended)"
-            elif key == "rdkit":
-                result[key] = "RDKit 2D molecular descriptors (~210 features)"
+        from automol.feature_generators import (
+            FEATURE_KEY_ALIASES,
+            retrieve_default_offline_generators,
+        )
+        for key in retrieve_default_offline_generators():
+            if key in FEATURE_KEY_ALIASES:
+                continue
+            if key in _STATIC:
+                result[key] = _STATIC[key]
             elif key.startswith("fps_"):
                 result[key] = f"Morgan circular fingerprints ({key})"
     except ImportError:
-        result["Bottleneck"] = "250-dim ONNX pretrained transformer encoder (fast, recommended)"
-        result["rdkit"] = "RDKit 2D molecular descriptors (~210 features)"
-        result["fps_2048_2"] = "Morgan circular fingerprints (2048 bits, radius 2)"
+        result.update(_STATIC)
 
     # Probe for molfeat
     try:
@@ -54,6 +73,16 @@ def list_feature_generators() -> dict[str, str]:
 
     result["_note"] = "ECFP pattern: fps_{nbits}_{radius} (e.g. fps_1024_3, fps_4096_2)"
     return result
+
+
+@lru_cache(maxsize=1)
+def list_feature_generator_aliases() -> dict[str, str]:
+    """Return {alias: canonical_key} for accepted-but-unlisted feature keys."""
+    try:
+        from automol.feature_generators import FEATURE_KEY_ALIASES
+        return dict(FEATURE_KEY_ALIASES)
+    except ImportError:
+        return {"Bottleneck_chembl37_logd": "Bottleneck"}
 
 
 @lru_cache(maxsize=4)

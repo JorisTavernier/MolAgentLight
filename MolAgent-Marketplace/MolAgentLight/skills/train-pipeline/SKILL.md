@@ -38,22 +38,18 @@ When the MCP server is remote (added via `claude mcp add` with an HTTP URL), the
 **Upload flow**:
 
 1. Check if already uploaded: call `list_datasets()` and look for a matching filename.
-2. If not uploaded, use the **Read tool** to read `~/.claude.json` (Windows: `C:/Users/<username>/.claude.json`). Find the key under `projects` that matches the current project path, then read `.mcpServers.<server-name>.url` and `.headers.Authorization`. Strip `"Bearer "` from the Authorization value to get the token. Example structure:
-   ```json
-   {
-     "projects": {
-       "C:/Users/you/Projects/MyProject": {
-         "mcpServers": {
-           "molagent": {
-             "url": "http://127.0.0.1:8001/mcp",
-             "headers": { "Authorization": "Bearer molagent_usr_abc123..." }
-           }
-         }
-       }
-     }
-   }
+2. If not uploaded, retrieve the MCP URL and token by running:
+   ```bash
+   claude mcp get <server-name>
    ```
-   > **Do not grep for the token** — read the file directly with the Read tool. If `~/.claude.json` doesn't contain the server entry, also check `.claude/settings.local.json` and `.claude/settings.json` in the project root.
+   This prints the server URL and the `Authorization` header directly. Strip `"Bearer "` from the Authorization value to get the token. Example output:
+   ```
+   automol-mcp:
+     Type: http
+     URL: http://127.0.0.1:8001/mcp
+     Headers:
+       Authorization: Bearer molagent_usr_abc123...
+   ```
 3. Run this upload command via Bash, substituting the three values:
 
 ```bash
@@ -108,7 +104,17 @@ Target Summary:
 **Critical domain terms** (present these correctly to users):
 - **RegressionClassification** is binary classification via regression estimators on 0/1 labels (predictions clipped to [0,1] as probabilities). It is NOT "train both regression and classification."
 - **blender_properties** are auxiliary numeric columns used as extra input features alongside molecular representations — they are NOT targets.
-- **feature_keys** are molecular representation methods (Bottleneck encoder, RDKit descriptors, fingerprints) — not CSV column names.
+- **feature_keys** are molecular representation methods — not CSV column names. Encoder table:
+
+  | Key | Notes |
+  |---|---|
+  | `Bottleneck` | Default. ChEMBL 37 E-logD (v6_best), trained with logD supervision. Best general accuracy. |
+  | `Bottleneck_chembl37_base` | ChEMBL 37 E-base, no logD supervision. Use for logD/logP/lipophilicity targets to avoid optimistic CV bias. |
+  | `Bottleneck_chembl27` | Legacy. Use only to reproduce results from old models. |
+  | `rdkit` | ~210 RDKit 2D descriptors. |
+  | `fps_2048_2` | Morgan fingerprints (2048 bits, radius 2). Pattern `fps_{nbits}_{radius}` is dynamic. |
+
+  **logD supervision note:** `Bottleneck` is trained with ChEMBL's `rtlogd` label, so it gives optimistically biased CV scores when the target itself is logD, logP, or lipophilicity. Use `Bottleneck_chembl37_base` for those endpoints. For all others (permeability, toxicity, activity, etc.), `Bottleneck` is the correct default.
 
 ### Step 3: Apply Overrides or Confirm
 

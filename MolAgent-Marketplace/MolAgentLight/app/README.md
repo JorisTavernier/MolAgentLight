@@ -152,6 +152,30 @@ curl -X POST http://127.0.0.1:8000/api/admin/manage \
 
 Tokens are stored in `${MOLAGENT_OUTPUT_ROOT}/auth_tokens.json`. Override location with `MOLAGENT_TOKEN_STORE_PATH`.
 
+### Where the trust boundary is
+
+**The MCP server is the security boundary. This web app is a local client.**
+
+The backend API is intentionally **unauthenticated**. It binds `127.0.0.1` (see `start.sh`), so only the machine running it can reach port 8000 — and anything with local code execution could read the MCP token out of the process anyway, so a second credential in front of it would add ceremony, not security.
+
+All authorization lives in the MCP server:
+
+| Concern | Enforced by |
+|---|---|
+| Who may call which tool | MCP token auth (`MOLAGENT_AUTH_REQUIRED=true`) |
+| Per-user model/dataset isolation | `owner_id` on registry entries |
+| Admin-only operations | `is_admin` on the caller's token |
+| Reserved identities (`__local__`) | `create_user_token` rejects them |
+| Filesystem containment | `_under_output_root()` |
+
+The single credential the app holds is `auth_token` in settings — the **user token it presents outbound** to a remote MCP server. It is never sent to the browser (`GET /api/settings` returns only `has_auth: bool`) and is not persisted to disk.
+
+**Scope:** securing a hosted deployment of this web app is out of scope for this project, and nothing in the backend tries to prevent one. `start.sh` binds `127.0.0.1`, which is the intended setup.
+
+If you need remote access, host the *MCP server* — that is the component with real authentication — and point a locally-run web app at it.
+
+> **If you host this backend yourself, you own its access control.** Every route is unauthenticated, including `POST /api/admin/manage`. Bind it to loopback and front it with something that authenticates (reverse proxy, SSO, VPN, SSH tunnel). Do not expose port 8000 directly.
+
 ### Multi-User Setup
 
 1. Start the MCP server with `MOLAGENT_AUTH_REQUIRED=true`

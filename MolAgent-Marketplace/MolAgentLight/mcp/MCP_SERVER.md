@@ -13,7 +13,7 @@ The server provides thirteen tools:
 | `list_options` | Discovery | Discover available feature generators, estimators, configs installed on this server |
 | `start_training_session` | Detection | Runs dataset auto-detection, creates a session, returns detected defaults + available options. Accepts `csv_file` or `dataset_id` |
 | `answer_training_question` | Configuration | Accepts typed field overrides (Claude parses user language); returns final config when confirmed |
-| `train_and_visualize` | Long-running | Takes a `TrainingConfig`, runs the full pipeline, returns model (base64) + interactive HTML dashboard. Uses `task=True` (FastMCP SEP-1686) — returns a task ID immediately when called from a client that supports the tasks protocol (e.g. the web app). **Claude Code's built-in MCP client does not support tasks** — the connection drops with `-32000` when the tool is called, but training continues in the background and results land in `MolagentFiles/`. Reconnect and call `list_models` when done. |
+| `train_and_visualize` | Long-running | Takes a `TrainingConfig`, runs the full pipeline, returns model (base64) + interactive HTML dashboard. Uses `call_tool_task` from `fastmcp_tasks` (FastMCP 4 background execution via Docket) — returns a task ID immediately when called from a client that supports the tasks protocol (e.g. the web app). **Claude Code's built-in MCP client does not support tasks** — the connection drops with `-32000` when the tool is called, but training continues in the background and results land in `MolagentFiles/`. Reconnect and call `list_models` when done. |
 | `list_models` | Discovery | Lists trained models visible to the authenticated user (admin sees all) |
 | `predict` | Inference | Runs predictions on new SMILES using a trained model (by registry ID or direct path). `smiles_file` accepts a path or `dataset_id` |
 | `merge_models` | Management | Merge multiple per-property models from the registry into a single multi-property file |
@@ -251,11 +251,11 @@ claude mcp add automol-mcp \
 ### Manual add — remote HTTP with auth
 
 ```bash
-claude mcp add automol-mcp http://127.0.0.1:8001/mcp \
+claude mcp add --transport http automol-mcp http://127.0.0.1:8001/mcp \
   --header "Authorization: Bearer <user token>"
 ```
 
-Or with explicit flags:
+Or with the `--url` flag form:
 
 ```bash
 claude mcp add automol-mcp \
@@ -387,6 +387,12 @@ Uploaded datasets are tracked in `${MOLAGENT_OUTPUT_ROOT}/data_registry.json`. E
 
 > **Claude Code CLI users:** Do NOT pass `file_content_b64` through the MCP tool call directly — base64 of files >30KB will be truncated by LLM I/O limits. Instead, use the in-process upload snippet that keeps base64 in Python memory:
 >
+> Retrieve the URL and token first:
+> ```bash
+> claude mcp get <server-name>   # prints URL and Authorization header
+> ```
+>
+> Then upload:
 > ```bash
 > uv run --with fastmcp python -c "
 > import asyncio,base64,json,sys,os
@@ -470,8 +476,31 @@ All parameters are Pydantic-validated. Required fields are marked with *.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `computational_load` | `str` | `"cheap"` | `free` (0-2 min) / `cheap` (2-10 min) / `moderate` (10-360 min) / `expensive` (1-48 hr) |
-| `feature_keys` | `list[str]` | `["Bottleneck"]` | Feature generators: `Bottleneck`, `rdkit`, `fps_2048_2` |
+| `feature_keys` | `list[str]` | `["Bottleneck"]` | Feature generators — see the encoder table below, plus `rdkit` and `fps_{nbits}_{radius}` |
 | `sep` | `str` | `","` | CSV separator |
+
+#### Encoders
+
+All three produce 250-dimensional embeddings and require only `onnxruntime`.
+
+| Key | Checkpoint | Corpus | Property targets | Use it for |
+|---|---|---|---|---|
+| `Bottleneck` | `v6_best` (E-logD), epoch 39 | full ChEMBL 37 | 8 RDKit descriptors + `rtlogd` | **Default.** Best predictive accuracy; the logD supervision also helps unrelated properties. |
+| `Bottleneck_chembl37_logd` | — | — | — | Explicit alias of `Bottleneck`. Accepted as input; not listed by `list_options`. |
+| `Bottleneck_chembl37_base` | `v5_full_best` (E-base), epoch 39 | full ChEMBL 37 | 8 RDKit descriptors | logD / logP / lipophilicity endpoints, and embedding-driven work (similarity search, nearest-neighbour retrieval, active-learning acquisition). |
+| `Bottleneck_chembl27` | `v1` (E-prod) | unrecorded; ChEMBL 27 vocabulary | includes experimental logD | Reproducing results from models trained before the ChEMBL 37 encoders landed. |
+
+> **Note on the Checkpoint column:** the names `v6_best`, `v5_full_best`, and `v1` are the upstream MolBottle training-run identifiers; the shipped `config.json` files carry `source_checkpoint` and `source_epoch` instead of these run names.
+
+**logD supervision.** `Bottleneck` is trained with ChEMBL's `rtlogd` label among its
+property-head targets, as was `Bottleneck_chembl27` before it. A logD, logP, or
+lipophilicity model built on either gets optimistically biased cross-validation.
+`Bottleneck_chembl37_base` has no logD supervision and is the clean choice for those
+endpoints. This is not enforced at run time — pick the encoder deliberately.
+
+`clustering_method="Bottleneck"` is a *different* setting: it selects k-means over
+encoder embeddings for the train/test split, and it uses whichever encoder the
+`Bottleneck` key resolves to, so splitting and training stay consistent.
 
 ### Regression transforms
 
@@ -742,7 +771,6 @@ and purge_stale. Requires a running server with `MOLAGENT_AUTH_REQUIRED=true`.
 |----------|---------|--------|
 | `MOLAGENT_PLUGIN_ROOT` | Plugin root directory | SessionStart hook / plugin.json |
 | `MOLAGENT_OUTPUT_ROOT` | Where run folders and registry live | SessionStart hook |
-| `PHARMAOS_MOLAGENT_ROOT` | Per-project output root (Nexus, takes precedence) | Nexus host |
 | `MOLAGENT_REGISTRY_PATH` | Full path override for `model_registry.json` | User |
 | `MOLAGENT_DETERMINISTIC` | `true` for reproducible runs | User |
 | `AUTOMOL_VENV` | Virtual environment path | User |
@@ -789,7 +817,7 @@ The token has been revoked or is invalid. Generate a new token via `admin_cli.py
 The server is running in remote/HTTP mode and cannot access local filesystem paths. Upload the CSV first with `upload_dataset`, then pass the returned `dataset_id` to `start_training_session(dataset_id=...)`. See the train-pipeline SKILL.md Step 0 for the full in-process upload snippet.
 
 **`train_and_visualize` disconnects with `-32000: Connection closed` from Claude Code**
-Expected behavior. `train_and_visualize` uses FastMCP's `task=True` (SEP-1686 background tasks). Claude Code's built-in MCP client does not implement the tasks protocol, so it drops the connection when the server returns a `CreateTaskResult`. Training continues in the background — results land in `MolagentFiles/` as normal. Wait for training to finish (check `MolagentFiles/` for the run folder), reconnect, and call `list_models` to find the completed model. The `task=True` path works as intended from the web app, which uses a FastMCP client that supports SEP-1686.
+Expected behavior. `train_and_visualize` uses `call_tool_task` from `fastmcp_tasks` (FastMCP 4 background execution). Claude Code's built-in MCP client does not implement the tasks protocol, so it drops the connection when the server returns a task result. Training continues in the background — results land in `MolagentFiles/` as normal. Wait for training to finish (check `MolagentFiles/` for the run folder), reconnect, and call `list_models` to find the completed model. The background-task path works as intended from the web app, which uses a FastMCP client that supports the tasks protocol.
 
 **`train_and_visualize` aborts with "sent no response or progress for 300s"**
 This is the Claude Code client-side tool execution idle timeout — different from server startup timeout. Training continues on the server despite the client abort. Call `list_models()` to check if the run completed. To prevent this, set `CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT` (ms) in `~/.claude/settings.json`:
@@ -799,7 +827,7 @@ This is the Claude Code client-side tool execution idle timeout — different fr
 Recommended: `1800000` (30 min). Alternatively, set a per-server `timeout` key in the server's MCP settings entry. Note: `MCP_TIMEOUT` (below) controls server startup only and has no effect here.
 
 **`Task {id} not found` during long training runs**
-The fastmcp client sends a default task TTL of 60s. The web app backend overrides this to 48h in `mcp_client.py`. If you see this error from a custom client, pass `ttl=48*3600*1000` (48h in ms) to `client.call_tool(..., task=True, ttl=...)`. For the remote MCP server, also set `FASTMCP_DOCKET_REDELIVERY_TIMEOUT=86400` to prevent docket from assuming the task is dead during long training.
+Background tools use `call_tool_task(client, name, args)` from `fastmcp_tasks`. The web app backend refreshes the server-side task TTL by polling `tasks/get` every 5 s (see `job_store.py`). For the remote MCP server, set `FASTMCP_DOCKET_REDELIVERY_TIMEOUT=86400` to prevent Docket from assuming the task is dead during long training. Custom clients must keep polling — Docket's default `execution_ttl` is 15 min; if a client stops polling for longer than that, the task may be lost.
 
 **Training killed with exit code 137 (OOM)**
 The training process was killed by the OS out-of-memory killer. Reduce `--computational-load` to a lower level, reduce `--n-jobs-inner` to 1, or add swap space. Setting `MOLAGENT_DETERMINISTIC=true` forces single-threaded execution which halves peak memory.

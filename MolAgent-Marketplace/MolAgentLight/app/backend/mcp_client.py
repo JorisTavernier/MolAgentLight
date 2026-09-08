@@ -1,7 +1,7 @@
 """MCP client abstraction — persistent fastmcp.Client with task support.
 
 Supports local (stdio, keep_alive=True) and remote (streamable-http) transports.
-Long-running tools (train_and_visualize, predict) use task=True for background
+Long-running tools (train_and_visualize, predict) use call_tool_task for background
 execution with progress tracking and cancellation.
 """
 
@@ -16,6 +16,7 @@ from typing import Any, Literal
 
 from fastmcp import Client
 from fastmcp.client.transports import StdioTransport, StreamableHttpTransport
+from fastmcp_tasks import call_tool_task
 
 from .config import settings
 
@@ -187,7 +188,7 @@ async def call_tool_as_task(name: str, arguments: dict[str, Any]):
     """
     client = await ensure_connected()
     try:
-        task = await client.call_tool(name, arguments, task=True, ttl=48 * 3600 * 1000)
+        task = await call_tool_task(client, name, arguments)
         return task
     except Exception as exc:
         _check_auth_error(exc)
@@ -213,7 +214,11 @@ def _parse_result(result) -> Any:
         except (json.JSONDecodeError, ValueError):
             return result
 
-    # CallToolResult object (shouldn't happen with fastmcp.Client but handle it)
+    # FastMCP 4: CallToolResult.data is the parsed Python value (preferred)
+    if hasattr(result, "data") and result.data is not None:
+        return result.data
+
+    # Fallback: parse text content blocks
     if hasattr(result, "content"):
         texts = []
         for content in result.content:

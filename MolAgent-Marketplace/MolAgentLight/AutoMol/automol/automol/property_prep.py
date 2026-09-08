@@ -114,47 +114,48 @@ from math import log10,log
 def v2log(x):
     """
     value to log10 function
-    
+
     Args:
          x: the value x
-    
-    Returns: 
+
+    Returns:
         log10(x) or np.nan
     """
     try:
         return log10(x)
     except:
-        np.nan
+        return np.nan
 
 def divide_by_100(x):
     """
     divide value by 100
-    
+
     Args:
          x: the value x
-    
-    Returns: 
+
+    Returns:
         x/100 or np.nan
     """
     try:
         return x/100.0
     except:
-        np.nan
+        return np.nan
 
 def logit(x):
     """
     value to logit function
-    
+
     Args:
          x: the value x
-    
-    Returns: 
+
+    Returns:
         log(x/(1-x)) or np.nan
     """
     try:
+        x = max(1e-8, min(1 - 1e-8, x))
         return log(x/(1-x))
     except:
-        np.nan
+        return np.nan
 
 
 class PropertyBuilder:

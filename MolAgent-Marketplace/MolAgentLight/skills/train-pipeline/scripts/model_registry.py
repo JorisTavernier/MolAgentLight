@@ -10,7 +10,7 @@ Tracks model artifacts, metrics, and configuration in a central JSON file.
 Path resolution (in priority):
   1. MOLAGENT_REGISTRY_PATH env var (full file path)
   2. --directory CLI flag / config.output_folder from pipeline state
-  3. PHARMAOS_MOLAGENT_ROOT or MOLAGENT_OUTPUT_ROOT env var
+  3. MOLAGENT_OUTPUT_ROOT env var
   4. ./MolagentFiles
 """
 
@@ -192,7 +192,7 @@ def cli():
     default=None,
     help=(
         "Directory containing the registry. Defaults to "
-        "$MOLAGENT_OUTPUT_ROOT / $PHARMAOS_MOLAGENT_ROOT / ./MolagentFiles"
+        "$MOLAGENT_OUTPUT_ROOT / ./MolagentFiles"
     ),
 )
 @click.option(

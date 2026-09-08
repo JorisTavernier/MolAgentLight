@@ -362,11 +362,11 @@ class KmeansForSmiles(ClusteringAlgorithm):
         """
         super(KmeansForSmiles, self).__init__()
         if not feature_generators or feature_generators is None:
-            self._feature_generators= retrieve_default_offline_generators(model='ChEMBL', radius=2, nbits=2048, chylearn=0)
+            self._feature_generators= retrieve_default_offline_generators(model='ChEMBL', radius=2, nbits=2048)
         else:
             assert isinstance(feature_generators,dict), 'provided feature generators must be dictionary'
             self._feature_generators=feature_generators
-            
+
         if used_features is None or len(used_features)<1:
             used_features=['Bottleneck']
         self._used_features=[]
@@ -441,11 +441,11 @@ class SklearnClusteringForSmiles(ClusteringAlgorithm):
         """
         super(KmeansForSmiles, self).__init__()
         if not feature_generators or feature_generators is None:
-            self._feature_generators= retrieve_default_offline_generators(model='ChEMBL', radius=2, nbits=2048, chylearn=0)
+            self._feature_generators= retrieve_default_offline_generators(model='ChEMBL', radius=2, nbits=2048)
         else:
             assert isinstance(feature_generators,dict), 'provided feature generators must be dictionary'
             self._feature_generators=feature_generators
-            
+
         if used_features is None or len(used_features)<1:
             used_features=['Bottleneck']
         self._used_features=[]

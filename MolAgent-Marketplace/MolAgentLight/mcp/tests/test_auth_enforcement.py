@@ -27,7 +27,6 @@ import server
 def isolate_env(tmp_path, monkeypatch):
     monkeypatch.setenv("MOLAGENT_OUTPUT_ROOT", str(tmp_path))
     monkeypatch.delenv("MOLAGENT_AUTH_REQUIRED", raising=False)
-    monkeypatch.delenv("PHARMAOS_MOLAGENT_ROOT", raising=False)
     monkeypatch.delenv("MOLAGENT_REGISTRY_PATH", raising=False)
 
 

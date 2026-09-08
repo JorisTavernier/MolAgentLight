@@ -2,9 +2,8 @@
 
 Single source of truth for "where do outputs live". Resolved in priority:
 
-  1. PHARMAOS_MOLAGENT_ROOT   — Nexus-injected per-project root
-  2. MOLAGENT_OUTPUT_ROOT     — explicit user override
-  3. ./MolagentFiles          — default, relative to CWD
+  1. MOLAGENT_OUTPUT_ROOT     — explicit user override
+  2. ./MolagentFiles          — default, relative to CWD
 
 All scripts should use ``default_output_folder()`` for Click ``default=`` values
 and ``get_output_root()`` for runtime path computation. The model registry uses
@@ -23,9 +22,7 @@ REGISTRY_FILENAME = "model_registry.json"
 
 def get_output_root() -> Path:
     """Resolve the MolAgent output root directory."""
-    root = os.environ.get("PHARMAOS_MOLAGENT_ROOT") or os.environ.get(
-        "MOLAGENT_OUTPUT_ROOT"
-    )
+    root = os.environ.get("MOLAGENT_OUTPUT_ROOT")
     return Path(root) if root else Path(DEFAULT_ROOT_NAME)
 
 

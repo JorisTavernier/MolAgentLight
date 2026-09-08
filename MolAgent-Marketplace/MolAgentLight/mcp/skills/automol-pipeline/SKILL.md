@@ -34,7 +34,7 @@ You have access to the AutoMol molecular property prediction pipeline via MCP to
 | **Classification** | Predict discrete classes using classification estimators |
 | **RegressionClassification** | Binary classification via REGRESSION estimators on 0/1 labels — predictions clipped to [0,1] as probabilities. This is NOT "run both tasks simultaneously" |
 | **blender_properties** | Auxiliary numeric columns used as extra input features alongside molecular representations — they are NOT prediction targets |
-| **feature_keys** | Molecular representation methods (Bottleneck, rdkit, fps_2048_2, etc.) — NOT CSV column names |
+| **feature_keys** | Molecular representation methods — NOT CSV column names. Encoders: `Bottleneck` (default), `Bottleneck_chembl37_base`, `Bottleneck_chembl27`; plus `rdkit`, `fps_2048_2`. Call `list_options(category='feature_generators')` for the live list and descriptions rather than hardcoding keys. |
 | **computational_load** | Runtime budget: `free` ~2 min, `cheap` ~10 min, `moderate` ~1 hr, `expensive` ~24 hr |
 | **dataset_id** | Registry ID (prefix `ds_`) referencing an uploaded CSV — used in place of file paths in remote mode |
 
@@ -257,6 +257,11 @@ answer_training_question(
 You can call this multiple times. Each call returns updated state and asks if there are more changes.
 
 Use `list_options(category=...)` to discover valid values for feature_keys, estimators, scorers, etc.
+
+For a logD, logP, or lipophilicity target, prefer `Bottleneck_chembl37_base` — the
+default `Bottleneck` encoder is trained with ChEMBL's logD label, which biases
+cross-validation on those endpoints. Nothing warns about this at run time, so raise
+it with the user when you see such a target.
 
 ### 5. Confirm
 

@@ -51,7 +51,7 @@ class Job:
     progress: int = 0
     progress_total: int = 0
     progress_label: str = ""
-    # FastMCP task handle (ToolTask) — set when using task=True
+    # FastMCP ToolTask handle (fastmcp_tasks.ToolTask)
     _task: Any = field(default=None, repr=False)
     # MCP task ID for cancellation/status queries
     task_id: str | None = None
@@ -78,21 +78,11 @@ def list_jobs() -> list[Job]:
 
 
 def launch_task_job(job: Job, task) -> None:
-    """Attach a ToolTask to a job and start polling its status in the background.
-
-    Args:
-        job: The Job wrapper (already in _store).
-        task: A fastmcp ToolTask returned by client.call_tool(..., task=True).
-    """
+    """Attach a ToolTask to a job and start the polling loop in the background."""
     job._task = task
     job.task_id = task.task_id
     job.status = JobStatus.RUNNING
-
-    if task.returned_immediately:
-        _fire_and_forget(_resolve_immediate(job, task))
-    else:
-        task.on_status_change(lambda status: _on_task_status(job, status))
-        _fire_and_forget(_wait_for_result(job, task))
+    _fire_and_forget(_wait_for_result(job, task))
 
 
 def _err_from_obj(obj) -> str | None:
@@ -139,34 +129,71 @@ async def _finalize_job(job: Job) -> None:
             logger.debug("on_complete callback failed", exc_info=True)
 
 
-async def _resolve_immediate(job: Job, task) -> None:
-    """Handle a task that the server executed immediately (no background)."""
-    try:
-        result = await task.result()
-        job.result = _parse_task_result(result)
-        job.status = JobStatus.SUCCESS
-        job.exit_code = 0
-        if job.progress_total:
-            job.progress = job.progress_total
-            job.progress_label = "Complete"
-    except Exception as exc:
-        msg = _rewrite_task_not_found(_extract_error_message(exc), job.task_id)
-        job.log_lines.append(f"ERROR: {msg}")
-        job.status = JobStatus.FAILED
-        job.exit_code = 1
-    finally:
-        await _finalize_job(job)
-
-
 # 48 hours — training can run for a very long time
 _TASK_TIMEOUT = 48 * 3600.0
+_POLL_INTERVAL = 5.0  # seconds between progress polls during task wait
+# NOTE: each poll issues tasks/get which refreshes the server-side task TTL.
+# Keep _POLL_INTERVAL well below the server's execution_ttl (Docket default: 15 min)
+# or long-running tasks may be lost if polling is interrupted.
+_MAX_CONSECUTIVE_ERRORS = 5  # tolerate this many consecutive network errors before giving up
 
 
 async def _wait_for_result(job: Job, task) -> None:
-    """Wait for background task completion and update job state."""
+    """Wait for background task completion, polling for progress every few seconds."""
+    elapsed = 0.0
+    _consecutive_errors = 0
     try:
-        # Wait for terminal state with a generous timeout (training can take hours)
-        await task.wait(timeout=_TASK_TIMEOUT)
+        # Short-interval poll loop: each iteration either reaches a terminal
+        # state (break) or updates progress and continues.
+        while elapsed < _TASK_TIMEOUT:
+            remaining = _TASK_TIMEOUT - elapsed
+            poll_time = min(_POLL_INTERVAL, remaining)
+            try:
+                await task.wait(timeout=poll_time)
+                break  # task reached a terminal state
+            except TimeoutError:
+                elapsed += poll_time
+                _consecutive_errors = 0  # reset on a clean "still running" signal
+                # Still running — update job progress from current status
+                try:
+                    status_update = await task.status()
+                    _on_task_status(job, status_update)
+                    _consecutive_errors = 0
+                except Exception:
+                    pass
+            except Exception:
+                # Transient network/server error — tolerate up to _MAX_CONSECUTIVE_ERRORS
+                elapsed += poll_time
+                _consecutive_errors += 1
+                if _consecutive_errors > _MAX_CONSECUTIVE_ERRORS:
+                    raise
+        else:
+            raise TimeoutError(f"Task timed out after {_TASK_TIMEOUT}s")
+
+        # task.wait() returned cleanly — check whether it failed
+        _GENERIC_FAIL_PREFIXES = ("task failed", "failed", "error")
+        try:
+            status = await task.status()
+            task_state = getattr(status, "status", None)
+            if task_state is not None and str(task_state) == "failed":
+                raw_msg = (getattr(status, "status_message", None) or "").strip()
+                low = raw_msg.lower()
+                is_generic = (
+                    not raw_msg
+                    or low in _GENERIC_FAIL_PREFIXES
+                    or any(low.startswith(p) and len(low) < len(p) + 30
+                           for p in _GENERIC_FAIL_PREFIXES)
+                    or "object has no attribute" in low
+                )
+                if raw_msg and not is_generic:
+                    msg = _rewrite_task_not_found(raw_msg, job.task_id)
+                    job.log_lines.append(f"ERROR: {msg}")
+                    job.status = JobStatus.FAILED
+                    job.exit_code = 1
+                    return
+        except Exception:
+            pass  # status() failed — fall through to task.result() path
+
         result = await task.result()
         job.result = _parse_task_result(result)
         job.status = JobStatus.SUCCESS
@@ -179,8 +206,6 @@ async def _wait_for_result(job: Job, task) -> None:
         job.status = JobStatus.FAILED
         job.exit_code = 1
     except Exception as exc:
-        # Only rewrite when the task_id itself appears in the message — avoids
-        # misclassifying unrelated "not found" errors (file, dataset, column…).
         msg = _rewrite_task_not_found(_extract_error_message(exc), job.task_id)
         job.log_lines.append(f"ERROR: {msg}")
         job.status = JobStatus.FAILED
@@ -222,9 +247,9 @@ def _on_task_status(job: Job, status) -> None:
         if mcp_status == "working":
             job.status = JobStatus.RUNNING
 
-        # Extract progress from notification — MCP only sends statusMessage,
+        # Extract progress from notification — MCP sends status_message (snake_case in FastMCP 4 / SDK v2),
         # not numeric progress fields, so we derive the step number from the label
-        msg = getattr(status, "statusMessage", None) or getattr(status, "message", None)
+        msg = getattr(status, "status_message", None) or getattr(status, "message", None)
         if msg:
             job.progress_label = msg
             step = _step_number_from_label(msg)
@@ -257,7 +282,7 @@ async def refresh_job_status(job: Job) -> None:
 
     Only queries if the job is still running — avoids unnecessary server calls.
     """
-    if job._task is None or job._task.returned_immediately:
+    if job._task is None:
         return
     if job.status not in (JobStatus.PENDING, JobStatus.RUNNING):
         return
@@ -279,7 +304,10 @@ def _parse_task_result(result) -> Any:
             return json.loads(result)
         except (json.JSONDecodeError, ValueError):
             return result
-    # CallToolResult with .content
+    # FastMCP 4: CallToolResult.data is the parsed Python value (preferred)
+    if hasattr(result, "data") and result.data is not None:
+        return result.data
+    # Fallback: join text content blocks and JSON-parse
     if hasattr(result, "content"):
         texts = []
         for content in result.content:

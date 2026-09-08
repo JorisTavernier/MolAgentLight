@@ -588,15 +588,19 @@ def render_dashboard(
     payload = sanitize_for_json(payload)
     data_json = json.dumps(payload, default=str, ensure_ascii=False)
 
-    # Escape closing-script tag inside JSON to keep <script> parsing intact
+    # Escape </script> and HTML comment markers to prevent script-context breakout
     data_json = data_json.replace("</", "<\\/")
+    data_json = data_json.replace("<!--", "\\u003c!--")
+    data_json = data_json.replace("-->", "--\\u003e")
 
+    import html as _html
+    _esc = _html.escape
     html = (
         template
         .replace(PLACEHOLDER_DATA, data_json, 1)
-        .replace(PLACEHOLDER_TITLE, title or f"MolAgent — {run_id}")
-        .replace(PLACEHOLDER_RUN_ID, run_id)
-        .replace(PLACEHOLDER_ARTIFACT_ID, artifact_id or run_id)
+        .replace(PLACEHOLDER_TITLE, _esc(title or f"MolAgent — {run_id}"))
+        .replace(PLACEHOLDER_RUN_ID, _esc(run_id))
+        .replace(PLACEHOLDER_ARTIFACT_ID, _esc(artifact_id or run_id))
     )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

@@ -32,10 +32,10 @@ class SingleLigand():
     def __init__(self,verbose=False):
         self.verbose=verbose
         
-    def precompute_features(self,smiles=None,gen_features={},feature_generators={},feature_list=None, original_indices=None, indices=None):
-        """    
+    def precompute_features(self,smiles=None,gen_features=None,feature_generators=None,feature_list=None, original_indices=None, indices=None):
+        """
         generate all features
-        
+
         Args:
              smiles: column name of the smiles
              df: dataframe
@@ -45,6 +45,8 @@ class SingleLigand():
              original_indices: unused in case of single ligand
              indices: unused in case of single ligand
         """
+        if gen_features is None: gen_features = {}
+        if feature_generators is None: feature_generators = {}
         start_precompute=time.time()
 
         if feature_list is not None:
@@ -116,23 +118,25 @@ class PairedLigands():
                 l.append((i,j))
         return l
         
-    def precompute_features(self,smiles=None,gen_features={},feature_generators={},feature_list=None,original_indices=None,indices=None):
-        """    
+    def precompute_features(self,smiles=None,gen_features=None,feature_generators=None,feature_list=None,original_indices=None,indices=None):
+        """
         generate all features
 
         We pass both the original indices as the new indices as pairs. The original in case there is a predefined dataset
         containing both training and validation data (expensive preprocessed molecular graph dataset for example). The original
-        indices refer to the index in this dataset. The indices are the new indices and refer directly to the training set 
-        
+        indices refer to the index in this dataset. The indices are the new indices and refer directly to the training set
+
         Args:
              smiles: column name of the smiles
              df: dataframe
              gen_features: dictionary with already generated features
              feature_generators: dictionary with feature generators
              feature_list: list of used feature generation keys
-             original_indices: the original pairs of indices, corresponding to a preprocessed dataset before data splitting 
-             indices: indices for splitted datasets 
+             original_indices: the original pairs of indices, corresponding to a preprocessed dataset before data splitting
+             indices: indices for splitted datasets
         """
+        if gen_features is None: gen_features = {}
+        if feature_generators is None: feature_generators = {}
         start_precompute=time.time()
         features={}
         

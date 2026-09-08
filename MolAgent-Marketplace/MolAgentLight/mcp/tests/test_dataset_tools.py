@@ -26,7 +26,6 @@ def isolate_env(tmp_path, monkeypatch):
     """Point output root at tmp_path for each test."""
     monkeypatch.setenv("MOLAGENT_OUTPUT_ROOT", str(tmp_path))
     monkeypatch.delenv("MOLAGENT_AUTH_REQUIRED", raising=False)
-    monkeypatch.delenv("PHARMAOS_MOLAGENT_ROOT", raising=False)
     monkeypatch.delenv("MOLAGENT_REGISTRY_PATH", raising=False)
 
 
@@ -74,7 +73,8 @@ def test_upload_dataset(server_mcp, tmp_path):
     assert uploaded_file.exists()
 
 
-def test_upload_deduplicates_filename(server_mcp, tmp_path):
+def test_upload_identical_content_returns_same_id(server_mcp, tmp_path):
+    """Scenario 2: same bytes → same dataset_id, no duplicate entry."""
     from fastmcp import Client
 
     filename, b64 = make_csv_b64(5)
@@ -86,9 +86,30 @@ def test_upload_deduplicates_filename(server_mcp, tmp_path):
             return r1.data, r2.data
 
     d1, d2 = asyncio.run(_run())
-    assert d1["filename"] == "test_data.csv"
-    assert d2["filename"] == "test_data_2.csv"
-    assert d1["dataset_id"] != d2["dataset_id"]
+    assert d1["dataset_id"] == d2["dataset_id"]
+    assert d1["filename"] == d2["filename"]
+
+
+def test_upload_same_name_different_content_upserts(server_mcp, tmp_path):
+    """Scenario 1: same filename, different content → same id, updated metadata."""
+    from fastmcp import Client
+
+    filename, b64_v1 = make_csv_b64(5)
+    _, b64_v2 = make_csv_b64(10)  # different row count → different bytes
+
+    async def _run():
+        async with Client(server_mcp) as client:
+            r1 = await client.call_tool("upload_dataset", {"filename": filename, "file_content_b64": b64_v1})
+            r2 = await client.call_tool("upload_dataset", {"filename": filename, "file_content_b64": b64_v2})
+            listed = await client.call_tool("list_datasets", {})
+            return r1.data, r2.data, listed.data
+
+    d1, d2, listed = asyncio.run(_run())
+    assert d1["dataset_id"] == d2["dataset_id"]
+    assert d2["row_count"] == 10
+    # Only one entry in the registry for this filename
+    matching = [ds for ds in listed["datasets"] if ds["filename"] == filename]
+    assert len(matching) == 1
 
 
 def test_upload_invalid_base64(server_mcp):

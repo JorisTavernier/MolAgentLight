@@ -75,7 +75,7 @@ def setup_3d_feature_generators(feature_generators, sdf_file, protein_folder,
 @click.option('--smiles-column', default=None, help='SMILES column (auto-detected from JSON info)')
 @click.option('--properties', multiple=True, default=None, help='Properties to model (auto-detected from JSON info)')
 @click.option('--blender-properties', multiple=True, default=None, help='Additional properties to pass to blender/final estimator (auto-detected from prep info or specified here)')
-@click.option('--feature-keys', multiple=True, default=None, help='Feature generators to use (default: Bottleneck rdkit). For 3D features, explicitly add "prolif" and/or "AffGraph"')
+@click.option('--feature-keys', multiple=True, default=None, help='Feature generators to use (default: Bottleneck rdkit). Encoders: Bottleneck (ChEMBL 37 E-logD), Bottleneck_chembl37_base (no logD supervision — use for logD/logP/lipophilicity), Bottleneck_chembl27 (legacy). For 3D features, explicitly add "prolif" and/or "AffGraph"')
 # 3D feature options:
 @click.option('--sdf-file', default=None, help='Path to SDF file with 3D ligand structures (required for 3D features)')
 @click.option('--protein-folder', default=None, help='Path to folder containing protein PDB files (required for 3D features)')
